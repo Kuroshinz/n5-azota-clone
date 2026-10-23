@@ -1,7 +1,7 @@
-import { Exam, OptionKey, Submission } from '../types/exam';
+import { Exam, StudentAnswerValue, Submission } from '../types/exam';
 
 const memoryExams = new Map<string, Exam>();
-const memoryDrafts = new Map<string, Record<number, OptionKey>>();
+const memoryDrafts = new Map<string, Record<number, StudentAnswerValue>>();
 const memorySubmissions = new Map<string, Submission>();
 
 const isBrowser = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
@@ -62,7 +62,7 @@ export function listExams(): Exam[] {
   return Array.from(memoryExams.values());
 }
 
-export function saveDraft(examId: string, answers: Record<number, OptionKey>): void {
+export function saveDraft(examId: string, answers: Record<number, StudentAnswerValue>): void {
   memoryDrafts.set(examId, { ...answers });
   if (isBrowser) {
     try {
@@ -73,7 +73,7 @@ export function saveDraft(examId: string, answers: Record<number, OptionKey>): v
   }
 }
 
-export function getDraft(examId: string): Record<number, OptionKey> {
+export function getDraft(examId: string): Record<number, StudentAnswerValue> {
   if (isBrowser) {
     try {
       const raw = localStorage.getItem(`${DRAFT_PREFIX}${examId}`);
@@ -102,7 +102,7 @@ export function clearDraft(examId: string): void {
 
 export function calculateScore(
   exam: Exam,
-  answers: Record<number, OptionKey>
+  answers: Record<number, StudentAnswerValue>
 ): { score: number; totalScore: number; correctCount: number } {
   let score = 0;
   let totalScore = 0;
@@ -111,9 +111,48 @@ export function calculateScore(
   for (const q of exam.questions) {
     totalScore += q.score;
     const studentAns = answers[q.id];
-    if (studentAns && q.correctAnswer && studentAns.toUpperCase() === q.correctAnswer.toUpperCase()) {
-      score += q.score;
-      correctCount += 1;
+    if (studentAns === undefined || studentAns === null) continue;
+
+    const qType = q.type || 'multiple_choice';
+
+    if (qType === 'multiple_choice') {
+      if (typeof studentAns === 'string' && q.correctAnswer) {
+        if (studentAns.trim().toUpperCase() === q.correctAnswer.toUpperCase()) {
+          score += q.score;
+          correctCount += 1;
+        }
+      }
+    } else if (qType === 'true_false' && q.subItems && q.subItems.length > 0) {
+      if (typeof studentAns === 'object' && studentAns !== null) {
+        const studentTf = studentAns as Record<string, boolean>;
+        let matchingSubItems = 0;
+        for (const sub of q.subItems) {
+          if (sub.correctAnswer !== undefined && studentTf[sub.key] === sub.correctAnswer) {
+            matchingSubItems += 1;
+          }
+        }
+
+        let ratio = 0;
+        if (matchingSubItems === 1) ratio = 0.1;
+        else if (matchingSubItems === 2) ratio = 0.25;
+        else if (matchingSubItems === 3) ratio = 0.5;
+        else if (matchingSubItems === 4) {
+          ratio = 1.0;
+          correctCount += 1;
+        }
+
+        score += Number((ratio * q.score).toFixed(2));
+      }
+    } else if (qType === 'short_answer' && q.acceptedAnswers && q.acceptedAnswers.length > 0) {
+      if (typeof studentAns === 'string') {
+        const norm = (s: string) => s.trim().replace(/,/g, '.').toLowerCase();
+        const studentNorm = norm(studentAns);
+        const isMatch = q.acceptedAnswers.some(accepted => norm(accepted) === studentNorm);
+        if (isMatch) {
+          score += q.score;
+          correctCount += 1;
+        }
+      }
     }
   }
 

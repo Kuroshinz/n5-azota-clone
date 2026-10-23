@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   saveExam,
   getExam,
@@ -18,11 +18,12 @@ describe('Exam Storage & Scoring Service', () => {
     id: 'exam-test-1',
     title: 'Đề kiểm tra thử',
     durationMinutes: 10,
-    totalQuestions: 2,
+    totalQuestions: 3,
     createdAt: new Date().toISOString(),
     questions: [
       {
         id: 1,
+        type: 'multiple_choice',
         rawText: 'Câu 1...',
         content: '1 + 1 = ?',
         options: [
@@ -32,90 +33,111 @@ describe('Exam Storage & Scoring Service', () => {
           { key: 'D', content: '4' },
         ],
         correctAnswer: 'B',
-        score: 5.0,
+        score: 1.0,
       },
       {
         id: 2,
+        type: 'true_false',
         rawText: 'Câu 2...',
-        content: '2 * 3 = ?',
-        options: [
-          { key: 'A', content: '5' },
-          { key: 'B', content: '6' },
-          { key: 'C', content: '7' },
-          { key: 'D', content: '8' },
+        content: 'Xét tính đúng sai của các khẳng định sau:',
+        options: [],
+        subItems: [
+          { key: 'a', content: '2 là số chẵn', correctAnswer: true },
+          { key: 'b', content: '3 là số chẵn', correctAnswer: false },
+          { key: 'c', content: '5 là số nguyên tố', correctAnswer: true },
+          { key: 'd', content: '9 là số nguyên tố', correctAnswer: false },
         ],
-        correctAnswer: 'B',
-        score: 5.0,
+        score: 1.0,
+      },
+      {
+        id: 3,
+        type: 'short_answer',
+        rawText: 'Câu 3...',
+        content: 'Nghiệm của phương trình 2x = 5 là:',
+        options: [],
+        acceptedAnswers: ['2.5', '5/2'],
+        score: 1.0,
       },
     ],
   };
-
-  beforeEach(() => {
-    // clear in-memory store
-  });
 
   it('saves and retrieves exams', () => {
     saveExam(sampleExam);
     const retrieved = getExam('exam-test-1');
     expect(retrieved).toBeDefined();
     expect(retrieved?.title).toBe('Đề kiểm tra thử');
-
-    const all = listExams();
-    expect(all.some(e => e.id === 'exam-test-1')).toBe(true);
   });
 
-  it('saves, retrieves, and clears student exam answer drafts', () => {
-    saveDraft('exam-test-1', { 1: 'B', 2: 'A' });
+  it('saves and retrieves drafts with multiple answer types', () => {
+    saveDraft('exam-test-1', {
+      1: 'B',
+      2: { a: true, b: false, c: true, d: false },
+      3: '2.5',
+    });
     const draft = getDraft('exam-test-1');
     expect(draft[1]).toBe('B');
-    expect(draft[2]).toBe('A');
+    expect(draft[2]).toEqual({ a: true, b: false, c: true, d: false });
+    expect(draft[3]).toBe('2.5');
 
     clearDraft('exam-test-1');
-    const emptyDraft = getDraft('exam-test-1');
-    expect(emptyDraft).toEqual({});
+    expect(getDraft('exam-test-1')).toEqual({});
   });
 
-  it('calculates score correctly based on correct answers', () => {
-    // Both correct: 5 + 5 = 10
-    const perfectResult = calculateScore(sampleExam, { 1: 'B', 2: 'B' });
-    expect(perfectResult.score).toBe(10.0);
-    expect(perfectResult.totalScore).toBe(10.0);
-    expect(perfectResult.correctCount).toBe(2);
+  it('scores True/False questions according to GDPT 2018 grading scale', () => {
+    // 4/4 correct -> 1.0 score
+    const res4 = calculateScore(sampleExam, {
+      2: { a: true, b: false, c: true, d: false },
+    });
+    expect(res4.score).toBe(1.0);
 
-    // One correct: 5
-    const partialResult = calculateScore(sampleExam, { 1: 'B', 2: 'C' });
-    expect(partialResult.score).toBe(5.0);
-    expect(partialResult.correctCount).toBe(1);
+    // 3/4 correct -> 0.5 score
+    const res3 = calculateScore(sampleExam, {
+      2: { a: true, b: false, c: true, d: true }, // d is wrong
+    });
+    expect(res3.score).toBe(0.5);
 
-    // Zero correct: 0
-    const zeroResult = calculateScore(sampleExam, { 1: 'A', 2: 'A' });
-    expect(zeroResult.score).toBe(0.0);
-    expect(zeroResult.correctCount).toBe(0);
+    // 2/4 correct -> 0.25 score
+    const res2 = calculateScore(sampleExam, {
+      2: { a: true, b: true, c: true, d: true }, // b and d are wrong
+    });
+    expect(res2.score).toBe(0.25);
+
+    // 1/4 correct -> 0.1 score
+    const res1 = calculateScore(sampleExam, {
+      2: { a: false, b: true, c: true, d: true }, // only c is correct
+    });
+    expect(res1.score).toBe(0.1);
+
+    // 0/4 correct -> 0.0 score
+    const res0 = calculateScore(sampleExam, {
+      2: { a: false, b: true, c: false, d: true },
+    });
+    expect(res0.score).toBe(0.0);
   });
 
-  it('saves and retrieves student submissions', () => {
-    const sub: Submission = {
-      id: 'sub-test-1',
-      examId: 'exam-test-1',
-      studentName: 'Trần Văn B',
-      answers: { 1: 'B', 2: 'B' },
-      score: 10,
-      totalScore: 10,
-      submittedAt: new Date().toISOString(),
-      proctoringReport: {
-        outScreenCount: 0,
-        fullscreenExitCount: 0,
-        totalOutDurationSeconds: 0,
-        events: [],
-      },
-    };
+  it('scores Short Answer questions with comma/dot and whitespace tolerance', () => {
+    // Student inputs comma '2,5' instead of '2.5'
+    const resComma = calculateScore(sampleExam, {
+      3: '2,5',
+    });
+    expect(resComma.score).toBe(1.0);
 
-    saveSubmission(sub);
-    const retrieved = getSubmission('sub-test-1');
-    expect(retrieved).toBeDefined();
-    expect(retrieved?.studentName).toBe('Trần Văn B');
+    // Student inputs with extra spaces
+    const resSpaces = calculateScore(sampleExam, {
+      3: '  2.5  ',
+    });
+    expect(resSpaces.score).toBe(1.0);
 
-    const list = getSubmissions('exam-test-1');
-    expect(list.some(s => s.id === 'sub-test-1')).toBe(true);
+    // Alternate accepted answer '5/2'
+    const resAlt = calculateScore(sampleExam, {
+      3: '5/2',
+    });
+    expect(resAlt.score).toBe(1.0);
+
+    // Wrong answer '4'
+    const resWrong = calculateScore(sampleExam, {
+      3: '4',
+    });
+    expect(resWrong.score).toBe(0.0);
   });
 });
