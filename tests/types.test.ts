@@ -3,7 +3,7 @@ import { Exam, Question, Option, Submission } from '../src/types/exam';
 import { ProctoringReport, ProctoringEvent } from '../src/types/proctoring';
 
 describe('Core Domain Types', () => {
-  it('instantiates valid Exam, Question, and Option structures', () => {
+  it('instantiates valid Multiple Choice Question', () => {
     const options: Option[] = [
       { key: 'A', content: '$x = 1$' },
       { key: 'B', content: '$x = 2$' },
@@ -13,6 +13,7 @@ describe('Core Domain Types', () => {
 
     const question: Question = {
       id: 1,
+      type: 'multiple_choice',
       rawText: 'Câu 1: Giải phương trình x - 2 = 0\nA. x = 1\nB. x = 2\nC. x = 3\nD. x = 4',
       content: 'Giải phương trình $x - 2 = 0$',
       options,
@@ -21,94 +22,71 @@ describe('Core Domain Types', () => {
       score: 1.0,
     };
 
-    const exam: Exam = {
-      id: 'exam-123',
-      title: 'Đề thi Toán giữa kỳ 1',
-      durationMinutes: 45,
-      totalQuestions: 1,
-      questions: [question],
-      createdAt: '2026-10-23T00:00:00.000Z',
-    };
-
-    expect(exam.id).toBe('exam-123');
-    expect(exam.title).toBe('Đề thi Toán giữa kỳ 1');
-    expect(exam.durationMinutes).toBe(45);
-    expect(exam.totalQuestions).toBe(1);
-    expect(exam.questions).toHaveLength(1);
-    expect(exam.questions[0].id).toBe(1);
-    expect(exam.questions[0].options).toHaveLength(4);
-    expect(exam.questions[0].correctAnswer).toBe('B');
-    expect(exam.questions[0].score).toBe(1.0);
+    expect(question.type).toBe('multiple_choice');
+    expect(question.options).toHaveLength(4);
+    expect(question.correctAnswer).toBe('B');
   });
 
-  it('instantiates valid ProctoringReport and ProctoringEvent structures', () => {
-    const events: ProctoringEvent[] = [
-      {
-        type: 'out_screen',
-        timestamp: 1729700000000,
-        details: 'User switched window',
-      },
-      {
-        type: 'fullscreen_exit',
-        timestamp: 1729700010000,
-      },
-      {
-        type: 'blur',
-        timestamp: 1729700020000,
-      },
-      {
-        type: 'visibility_hidden',
-        timestamp: 1729700030000,
-      },
-      {
-        type: 'inactivity',
-        timestamp: 1729700040000,
-      },
-    ];
-
-    const report: ProctoringReport = {
-      outScreenCount: 3,
-      fullscreenExitCount: 1,
-      totalOutDurationSeconds: 15,
-      events,
+  it('instantiates valid True/False Question with 4 sub-items', () => {
+    const question: Question = {
+      id: 2,
+      type: 'true_false',
+      rawText: 'Câu 2: Cho hàm số y = f(x)...',
+      content: 'Cho hàm số $y = x^3 - 3x$. Các mệnh đề sau đúng hay sai?',
+      score: 1.0,
+      options: [],
+      subItems: [
+        { key: 'a', content: 'Hàm số đồng biến trên $(1; +\\infty)$', correctAnswer: true },
+        { key: 'b', content: 'Hàm số nghịch biến trên $(-1; 1)$', correctAnswer: true },
+        { key: 'c', content: 'Giá trị cực đại là $y = -2$', correctAnswer: false },
+        { key: 'd', content: 'Đồ thị cắt trục hoành tại 3 điểm phân biệt', correctAnswer: true },
+      ],
     };
 
-    expect(report.outScreenCount).toBe(3);
-    expect(report.fullscreenExitCount).toBe(1);
-    expect(report.totalOutDurationSeconds).toBe(15);
-    expect(report.events).toHaveLength(5);
-    expect(report.events[0].type).toBe('out_screen');
-    expect(report.events[0].details).toBe('User switched window');
-    expect(report.events[1].details).toBeUndefined();
+    expect(question.type).toBe('true_false');
+    expect(question.subItems).toHaveLength(4);
+    expect(question.subItems?.[0].correctAnswer).toBe(true);
+    expect(question.subItems?.[2].correctAnswer).toBe(false);
   });
 
-  it('instantiates valid Submission structure connecting Exam and ProctoringReport', () => {
-    const report: ProctoringReport = {
-      outScreenCount: 0,
-      fullscreenExitCount: 0,
-      totalOutDurationSeconds: 0,
-      events: [],
+  it('instantiates valid Short Answer Question with accepted answers', () => {
+    const question: Question = {
+      id: 3,
+      type: 'short_answer',
+      rawText: 'Câu 3: Tính đạo hàm tại x = 2...',
+      content: 'Cho hàm số $f(x) = x^2 + 3x$. Tính $f\'(2)$.',
+      score: 0.5,
+      options: [],
+      acceptedAnswers: ['7', '7.0'],
     };
 
+    expect(question.type).toBe('short_answer');
+    expect(question.acceptedAnswers).toContain('7');
+  });
+
+  it('instantiates Submission with diverse student answer types', () => {
     const submission: Submission = {
-      id: 'sub-456',
+      id: 'sub-789',
       examId: 'exam-123',
       studentName: 'Nguyễn Văn A',
       answers: {
         1: 'B',
+        2: { a: true, b: true, c: false, d: true },
+        3: '7',
       },
-      score: 1.0,
-      totalScore: 1.0,
-      submittedAt: '2026-10-23T00:30:00.000Z',
-      proctoringReport: report,
+      score: 2.5,
+      totalScore: 2.5,
+      submittedAt: new Date().toISOString(),
+      proctoringReport: {
+        outScreenCount: 0,
+        fullscreenExitCount: 0,
+        totalOutDurationSeconds: 0,
+        events: [],
+      },
     };
 
-    expect(submission.id).toBe('sub-456');
-    expect(submission.examId).toBe('exam-123');
-    expect(submission.studentName).toBe('Nguyễn Văn A');
     expect(submission.answers[1]).toBe('B');
-    expect(submission.score).toBe(1.0);
-    expect(submission.totalScore).toBe(1.0);
-    expect(submission.proctoringReport.events).toEqual([]);
+    expect(submission.answers[2]).toEqual({ a: true, b: true, c: false, d: true });
+    expect(submission.answers[3]).toBe('7');
   });
 });

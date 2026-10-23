@@ -1,15 +1,15 @@
 'use client';
 
 import React from 'react';
-import { OptionKey, Question } from '../types/exam';
+import { OptionKey, Question, StudentAnswerValue } from '../types/exam';
 import { MathView } from './MathView';
 import { Flag, CheckCircle, XCircle } from 'lucide-react';
 
 interface QuestionCardProps {
   question: Question;
-  selectedOption?: OptionKey;
+  selectedOption?: StudentAnswerValue;
   isFlagged?: boolean;
-  onSelectOption?: (key: OptionKey) => void;
+  onSelectOption?: (val: any) => void;
   onToggleFlag?: () => void;
   showAnswer?: boolean;
   readOnly?: boolean;
@@ -55,54 +55,56 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
         <MathView content={question.content} />
       </div>
 
-      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-        {question.options.map(opt => {
-          const isSelected = selectedOption === opt.key;
-          const isCorrect = showAnswer && question.correctAnswer === opt.key;
-          const isWrongSelected = showAnswer && isSelected && !isCorrect;
+      {question.options && question.options.length > 0 && (
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+          {question.options.map(opt => {
+            const isSelected = selectedOption === opt.key;
+            const isCorrect = showAnswer && question.correctAnswer === opt.key;
+            const isWrongSelected = showAnswer && isSelected && !isCorrect;
 
-          let btnClass = 'border-gray-200 bg-gray-50/50 hover:border-indigo-300 hover:bg-indigo-50/30 text-gray-700';
+            let btnClass = 'border-gray-200 bg-gray-50/50 hover:border-indigo-300 hover:bg-indigo-50/30 text-gray-700';
 
-          if (showAnswer) {
-            if (isCorrect) {
-              btnClass = 'border-emerald-500 bg-emerald-50 text-emerald-900 font-medium';
-            } else if (isWrongSelected) {
-              btnClass = 'border-rose-400 bg-rose-50 text-rose-900 line-through';
+            if (showAnswer) {
+              if (isCorrect) {
+                btnClass = 'border-emerald-500 bg-emerald-50 text-emerald-900 font-medium';
+              } else if (isWrongSelected) {
+                btnClass = 'border-rose-400 bg-rose-50 text-rose-900 line-through';
+              }
+            } else if (isSelected) {
+              btnClass = 'border-indigo-600 bg-indigo-50/90 text-indigo-900 font-semibold shadow-sm ring-1 ring-indigo-600';
             }
-          } else if (isSelected) {
-            btnClass = 'border-indigo-600 bg-indigo-50/90 text-indigo-900 font-semibold shadow-sm ring-1 ring-indigo-600';
-          }
 
-          return (
-            <button
-              key={opt.key}
-              type="button"
-              disabled={readOnly}
-              onClick={() => onSelectOption?.(opt.key)}
-              className={`flex items-start gap-3 rounded-lg border p-3 text-left transition ${btnClass}`}
-            >
-              <span
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition ${
-                  showAnswer && isCorrect
-                    ? 'bg-emerald-600 text-white'
-                    : showAnswer && isWrongSelected
-                    ? 'bg-rose-600 text-white'
-                    : isSelected
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-white border border-gray-300 text-gray-700'
-                }`}
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                disabled={readOnly}
+                onClick={() => onSelectOption?.(opt.key)}
+                className={`flex items-start gap-3 rounded-lg border p-3 text-left transition ${btnClass}`}
               >
-                {opt.key}
-              </span>
-              <div className="flex-1 text-sm pt-0.5">
-                <MathView content={opt.content} />
-              </div>
-              {showAnswer && isCorrect && <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0" />}
-              {showAnswer && isWrongSelected && <XCircle className="h-5 w-5 text-rose-600 shrink-0" />}
-            </button>
-          );
-        })}
-      </div>
+                <span
+                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition ${
+                    showAnswer && isCorrect
+                      ? 'bg-emerald-600 text-white'
+                      : showAnswer && isWrongSelected
+                      ? 'bg-rose-600 text-white'
+                      : isSelected
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-white border border-gray-300 text-gray-700'
+                  }`}
+                >
+                  {opt.key}
+                </span>
+                <div className="flex-1 text-sm pt-0.5">
+                  <MathView content={opt.content} />
+                </div>
+                {showAnswer && isCorrect && <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0" />}
+                {showAnswer && isWrongSelected && <XCircle className="h-5 w-5 text-rose-600 shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {showAnswer && question.explanation && (
         <div className="mt-4 rounded-lg bg-amber-50/80 p-3.5 border border-amber-200 text-sm text-gray-800">
