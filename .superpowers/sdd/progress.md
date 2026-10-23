@@ -1,8 +1,8 @@
-# SDD ledger — plan: D:/Download/azota-clone/docs/plans/2026-10-23-azota-clone.md
+# SDD ledger — plan: D:/Download/azota-clone/docs/superpowers/plans/2026-10-23-true-false-and-short-answer.md
 
 ## Tasks
-- [x] Task 1: Project Scaffolding & Core Domain Types (commit 0e67045)
-- [x] Task 2: Vietnamese Exam & Math Parser Engine (commit 57ff6d9)
-- [x] Task 3: Proctoring & Anti-Cheat Engine (Client-side Sensor) (commit ea3d440)
-- [x] Task 4: Student Exam Room UI & Auto-Save (commit d57c309)
-- [x] Task 5: Teacher Dashboard (Exam Upload, Parser Preview & Submission Review) (commit 3f376bf)
+- [x] Task 1: Core Domain Model & Types Extension (commit ff31df7)
+- [x] Task 2: Parser Extension for True/False and Short Answer (commit 8841030)
+- [x] Task 3: Scoring & Tolerance Engine Extension (commit 21804f4)
+- [x] Task 4: UI Components for True/False & Short Answer (commit pending)
+- [x] Task 5: End-to-End Integration in Exam Room, Teacher Portal & Sample Data (commit pending)

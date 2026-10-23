@@ -1,11 +1,11 @@
 'use client';
 
 import React from 'react';
-import { OptionKey } from '../types/exam';
+import { StudentAnswerValue } from '../types/exam';
 
 interface QuestionNavGridProps {
   totalQuestions: number;
-  answers: Record<number, OptionKey>;
+  answers: Record<number, StudentAnswerValue>;
   flaggedQuestionIds: Set<number>;
   activeQuestionId?: number;
   onSelectQuestion: (id: number) => void;
@@ -20,15 +20,24 @@ export const QuestionNavGrid: React.FC<QuestionNavGridProps> = ({
 }) => {
   const qIds = Array.from({ length: totalQuestions }, (_, i) => i + 1);
 
+  const isQuestionAnswered = (val: StudentAnswerValue | undefined): boolean => {
+    if (val === undefined || val === null) return false;
+    if (typeof val === 'string') return val.trim().length > 0;
+    if (typeof val === 'object') return Object.keys(val).length > 0;
+    return false;
+  };
+
+  const answeredCount = qIds.filter(id => isQuestionAnswered(answers[id])).length;
+
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between text-xs font-medium text-gray-500">
-        <span className="font-semibold text-gray-800">Bảng câu hỏi ({Object.keys(answers).length}/{totalQuestions})</span>
+        <span className="font-semibold text-gray-800">Bảng câu hỏi ({answeredCount}/{totalQuestions})</span>
       </div>
 
       <div className="grid grid-cols-5 gap-2 max-h-64 overflow-y-auto p-1">
         {qIds.map(id => {
-          const isAnswered = answers[id] !== undefined;
+          const isAnswered = isQuestionAnswered(answers[id]);
           const isFlagged = flaggedQuestionIds.has(id);
           const isActive = activeQuestionId === id;
 

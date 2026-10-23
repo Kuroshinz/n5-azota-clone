@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { Exam, OptionKey, Submission } from '../../../types/exam';
+import { Exam, StudentAnswerValue, Submission } from '../../../types/exam';
 import {
   getExam,
   saveExam,
@@ -30,13 +30,14 @@ import {
 
 const DEFAULT_SAMPLE_EXAM: Exam = {
   id: 'sample-exam-1',
-  title: 'Đề thi trắc nghiệm Toán học & Khoa học Tự nhiên',
-  durationMinutes: 15,
+  title: 'Đề thi minh họa chuẩn GDPT 2018 (3 Dạng câu hỏi)',
+  durationMinutes: 20,
   totalQuestions: 4,
   createdAt: new Date().toISOString(),
   questions: [
     {
       id: 1,
+      type: 'multiple_choice',
       rawText: 'Câu 1...',
       content: 'Tìm tập nghiệm của phương trình bậc hai $x^2 - 5x + 6 = 0$.',
       options: [
@@ -51,6 +52,7 @@ const DEFAULT_SAMPLE_EXAM: Exam = {
     },
     {
       id: 2,
+      type: 'multiple_choice',
       rawText: 'Câu 2...',
       content: 'Tính tích phân sau: $$\\int_0^1 (2x + 1) dx$$',
       options: [
@@ -65,31 +67,28 @@ const DEFAULT_SAMPLE_EXAM: Exam = {
     },
     {
       id: 3,
+      type: 'true_false',
       rawText: 'Câu 3...',
-      content: 'Kim loại nào sau đây có tính dẫn điện tốt nhất ở điều kiện thường?',
-      options: [
-        { key: 'A', content: 'Đồng (Cu)' },
-        { key: 'B', content: 'Bạc (Ag)' },
-        { key: 'C', content: 'Vàng (Au)' },
-        { key: 'D', content: 'Nhôm (Al)' },
+      content: 'Cho hàm số $y = f(x) = x^3 - 3x^2 + 2$. Các khẳng định sau đúng hay sai?',
+      options: [],
+      subItems: [
+        { key: 'a', content: 'Đồ thị hàm số đi qua điểm $A(0; 2)$', correctAnswer: true },
+        { key: 'b', content: 'Đạo hàm là $f\'(x) = 3x^2 - 6x$', correctAnswer: true },
+        { key: 'c', content: 'Hàm số đạt cực đại tại $x = 2$', correctAnswer: false },
+        { key: 'd', content: 'Giá trị cực tiểu của hàm số bằng $-2$', correctAnswer: true },
       ],
-      correctAnswer: 'B',
-      explanation: 'Thứ tự dẫn điện giảm dần: Ag > Cu > Au > Al > Fe.',
       score: 2.5,
+      explanation: 'Hàm số đạt cực đại tại x = 0 (f(0) = 2) và cực tiểu tại x = 2 (f(2) = -2).',
     },
     {
       id: 4,
+      type: 'short_answer',
       rawText: 'Câu 4...',
-      content: 'Vận tốc ánh sáng trong chân không xấp xỉ bằng bao nhiêu?',
-      options: [
-        { key: 'A', content: '$3 \\times 10^8\\text{ m/s}$' },
-        { key: 'B', content: '$3 \\times 10^5\\text{ m/s}$' },
-        { key: 'C', content: '$340\\text{ m/s}$' },
-        { key: 'D', content: '$1.5 \\times 10^8\\text{ m/s}$' },
-      ],
-      correctAnswer: 'A',
-      explanation: 'Vận tốc ánh sáng trong chân không là $c \\approx 300\\,000\\text{ km/s} = 3 \\times 10^8\\text{ m/s}$.',
+      content: 'Tìm số điểm cực trị của đồ thị hàm số $g(x) = x^4 - 2x^2 + 3$.',
+      options: [],
+      acceptedAnswers: ['3'],
       score: 2.5,
+      explanation: 'Ta có $g\'(x) = 4x(x^2 - 1) = 0 \\Leftrightarrow x = 0, x = \\pm 1$ (3 điểm cực trị).',
     },
   ],
 };
@@ -104,9 +103,9 @@ export default function ExamTakingPage() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submission, setSubmission] = useState<Submission | null>(null);
 
-  const [answers, setAnswers] = useState<Record<number, OptionKey>>({});
+  const [answers, setAnswers] = useState<Record<number, StudentAnswerValue>>({});
   const [flaggedIds, setFlaggedIds] = useState<Set<number>>(new Set());
-  const [timeLeftSeconds, setTimeLeftSeconds] = useState(15 * 60);
+  const [timeLeftSeconds, setTimeLeftSeconds] = useState(20 * 60);
   const [showWarningModal, setShowWarningModal] = useState(false);
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
 
@@ -153,9 +152,9 @@ export default function ExamTakingPage() {
   }, [hasStarted, isSubmitted]);
 
   // Answer selection & auto-save
-  const handleSelectOption = (questionId: number, key: OptionKey) => {
+  const handleSelectOption = (questionId: number, val: StudentAnswerValue) => {
     if (isSubmitted) return;
-    const nextAnswers = { ...answers, [questionId]: key };
+    const nextAnswers = { ...answers, [questionId]: val };
     setAnswers(nextAnswers);
     if (exam) {
       saveDraft(exam.id, nextAnswers);
@@ -229,7 +228,7 @@ export default function ExamTakingPage() {
           <h1 className="mb-2 text-2xl font-bold text-gray-900">{exam.title}</h1>
           <p className="mb-6 text-sm text-gray-500">
             Thời gian: <strong>{exam.durationMinutes} phút</strong> | Số lượng:{' '}
-            <strong>{exam.totalQuestions} câu hỏi</strong>
+            <strong>{exam.totalQuestions} câu hỏi</strong> (Trắc nghiệm, Đúng/Sai, Trả lời ngắn)
           </p>
 
           <div className="mb-6 rounded-xl bg-indigo-50/70 p-4 text-left border border-indigo-100 text-sm text-indigo-950">
@@ -275,11 +274,6 @@ export default function ExamTakingPage() {
 
   // Post-exam Result Screen
   if (isSubmitted && submission) {
-    const answeredCount = Object.keys(submission.answers).length;
-    const correctCount = exam.questions.filter(
-      q => q.correctAnswer && submission.answers[q.id] === q.correctAnswer
-    ).length;
-
     return (
       <div className="mx-auto max-w-4xl p-6">
         <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-8 shadow-lg text-center">
@@ -290,22 +284,16 @@ export default function ExamTakingPage() {
           <h2 className="text-2xl font-bold text-gray-900 mb-1">NỘP BÀI THÀNH CÔNG</h2>
           <p className="text-sm text-gray-500 mb-6">Thí sinh: {submission.studentName} | {exam.title}</p>
 
-          <div className="mx-auto grid max-w-md grid-cols-3 gap-3 mb-6">
+          <div className="mx-auto grid max-w-md grid-cols-2 gap-3 mb-6">
             <div className="rounded-xl bg-indigo-50 p-4 border border-indigo-100">
-              <div className="text-2xl font-extrabold text-indigo-700">{submission.score}</div>
+              <div className="text-3xl font-extrabold text-indigo-700">{submission.score}</div>
               <div className="text-xs text-indigo-900 font-medium">Điểm số / 10</div>
             </div>
-            <div className="rounded-xl bg-emerald-50 p-4 border border-emerald-100">
-              <div className="text-2xl font-extrabold text-emerald-700">
-                {correctCount}/{exam.totalQuestions}
-              </div>
-              <div className="text-xs text-emerald-900 font-medium">Số câu đúng</div>
-            </div>
             <div className="rounded-xl bg-rose-50 p-4 border border-rose-100">
-              <div className="text-2xl font-extrabold text-rose-700">
+              <div className="text-3xl font-extrabold text-rose-700">
                 {submission.proctoringReport.outScreenCount}
               </div>
-              <div className="text-xs text-rose-900 font-medium">Lần vi phạm</div>
+              <div className="text-xs text-rose-900 font-medium">Lần vi phạm màn hình</div>
             </div>
           </div>
 
@@ -344,7 +332,13 @@ export default function ExamTakingPage() {
   }
 
   // Active Exam Room Layout
-  const answeredCount = Object.keys(answers).length;
+  const isAnswered = (val: StudentAnswerValue | undefined) => {
+    if (val === undefined || val === null) return false;
+    if (typeof val === 'string') return val.trim().length > 0;
+    if (typeof val === 'object') return Object.keys(val).length > 0;
+    return false;
+  };
+  const answeredCount = exam.questions.filter(q => isAnswered(answers[q.id])).length;
 
   return (
     <div className="min-h-screen bg-slate-100 pb-12">
@@ -402,7 +396,7 @@ export default function ExamTakingPage() {
                 question={q}
                 selectedOption={answers[q.id]}
                 isFlagged={flaggedIds.has(q.id)}
-                onSelectOption={key => handleSelectOption(q.id, key)}
+                onSelectOption={val => handleSelectOption(q.id, val)}
                 onToggleFlag={() => handleToggleFlag(q.id)}
               />
             ))}

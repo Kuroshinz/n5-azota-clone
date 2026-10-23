@@ -16,8 +16,10 @@ import {
   AlertCircle,
 } from 'lucide-react';
 
-const SAMPLE_TEMPLATE = `ĐỀ THI KIỂM TRA ĐỊNH KỲ MÔN TOÁN 11
+const SAMPLE_TEMPLATE = `ĐỀ THI MINH HỌA CHUẨN GDPT 2018
+MÔN: TOÁN HỌC
 
+PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn (A, B, C, D)
 Câu 1: Cho hàm số $f(x) = x^3 - 3x + 2$. Tìm đạo hàm $f'(x)$.
 A. $f'(x) = 3x^2 - 3$
 B. $f'(x) = 3x^2 + 3$
@@ -25,31 +27,40 @@ C. $f'(x) = x^2 - 3$
 D. $f'(x) = 3x^2$
 Đáp án: A
 Hướng dẫn giải:
-Ta áp dụng công thức đạo hàm cơ bản $(x^n)' = n x^{n-1}$.
-Do đó $(x^3 - 3x + 2)' = 3x^2 - 3$.
+Ta có $(x^3 - 3x + 2)' = 3x^2 - 3$.
 
-Câu 2: Nghiệm của phương trình lượng giác $\\sin x = \\frac{1}{2}$ trong khoảng $(0; \\pi)$ là:
-*A. $x = \\frac{\\pi}{6}$ và $x = \\frac{5\\pi}{6}$
-B. $x = \\frac{\\pi}{3}$
-C. $x = \\frac{2\\pi}{3}$
-D. $x = \\frac{\\pi}{4}$
+Câu 2: Vận tốc ánh sáng trong chân không xấp xỉ bằng bao nhiêu?
+*A. $3 \\times 10^8\\text{ m/s}$
+B. $3 \\times 10^5\\text{ m/s}$
+C. $340\\text{ m/s}$
+D. $1.5 \\times 10^8\\text{ m/s}$
 
-Câu 3: Một cấp số cộng có số hạng đầu $u_1 = 3$ và công sai $d = 2$. Tính $u_5$.
-A. $u_5 = 9$
-*B. $u_5 = 11$
-C. $u_5 = 13$
-D. $u_5 = 15$
+PHẦN II. Câu trắc nghiệm đúng sai (4 ý a, b, c, d)
+Câu 3: Cho hàm số $y = f(x) = x^3 - 3x^2 + 2$. Các khẳng định sau đúng hay sai?
+a) Đồ thị hàm số đi qua điểm $A(0; 2)$.
+b) Đạo hàm của hàm số là $f'(x) = 3x^2 - 6x$.
+c) Hàm số đạt cực đại tại $x = 2$.
+d) Giá trị cực tiểu của hàm số bằng $-2$.
+Đáp án: a) Đ, b) Đ, c) S, d) Đ
 Hướng dẫn giải:
-Công thức số hạng tổng quát của CSC: $u_n = u_1 + (n - 1)d$.
-Với $n = 5$: $u_5 = 3 + 4 \\times 2 = 11$.
+a) $f(0) = 2$ nên đúng.
+b) $f'(x) = 3x^2 - 6x$ nên đúng.
+c) Cực đại tại $x = 0$, cực tiểu tại $x = 2$ nên c sai.
+d) $f(2) = 8 - 12 + 2 = -2$ nên d đúng.
 
-BẢNG ĐÁP ÁN:
-1.A  2.A  3.B
+PHẦN III. Câu trắc nghiệm trả lời ngắn (Nhập đáp số)
+Câu 4: Tìm số điểm cực trị của hàm số $g(x) = x^4 - 2x^2 + 3$.
+Đáp số: 3
+Hướng dẫn giải:
+Phương trình $g'(x) = 4x(x^2 - 1) = 0$ có 3 nghiệm phân biệt.
+
+Câu 5: Tính diện tích hình chữ nhật có chiều dài bằng 12.5 cm và chiều rộng bằng 4 cm.
+Đáp án: 50
 `;
 
 export default function CreateExamPage() {
   const router = useRouter();
-  const [title, setTitle] = useState('Đề kiểm tra trắc nghiệm Toán 11');
+  const [title, setTitle] = useState('Đề thi minh họa chuẩn GDPT 2018');
   const [durationMinutes, setDurationMinutes] = useState(45);
   const [rawText, setRawText] = useState(SAMPLE_TEMPLATE);
   const [isSaving, setIsSaving] = useState(false);
@@ -105,7 +116,7 @@ export default function CreateExamPage() {
             </button>
             <div>
               <h1 className="text-base font-bold text-gray-900 leading-tight">Tạo đề thi mới (Tự động nhận diện)</h1>
-              <p className="text-xs text-gray-500">Hỗ trợ nhận diện câu hỏi tiếng Việt, bảng đáp án và công thức Toán LaTeX</p>
+              <p className="text-xs text-gray-500">Hỗ trợ nhận diện cả 3 dạng: Trắc nghiệm A/B/C/D, Đúng/Sai (a, b, c, d) và Trả lời ngắn</p>
             </div>
           </div>
 
@@ -116,7 +127,7 @@ export default function CreateExamPage() {
               className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition"
             >
               <Sparkles className="h-3.5 w-3.5" />
-              <span>Nạp đề mẫu</span>
+              <span>Nạp đề mẫu chuẩn GDPT 2018</span>
             </button>
 
             <button
@@ -179,7 +190,7 @@ export default function CreateExamPage() {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-semibold text-gray-700">Nội dung đề thi (Văn bản hoặc Word copy):</label>
-                  <span className="text-[11px] text-gray-400">Định dạng: Câu X: ..., A. B. C. D.</span>
+                  <span className="text-[11px] text-gray-400">Tự động nhận diện Phần I, II, III</span>
                 </div>
                 <textarea
                   rows={20}
@@ -202,7 +213,7 @@ export default function CreateExamPage() {
                     <span>Xem trước kết quả nhận diện (Live Preview)</span>
                   </h2>
                   <p className="text-xs text-gray-500">
-                    Nhận diện được: <strong>{parsedExam.questions.length} câu hỏi</strong> ({parsedExam.questions.filter(q => q.correctAnswer).length} câu có đáp án)
+                    Nhận diện được: <strong>{parsedExam.questions.length} câu hỏi</strong>
                   </p>
                 </div>
               </div>
