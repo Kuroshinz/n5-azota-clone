@@ -209,4 +209,19 @@ Vậy nghiệm của phương trình là x = 3.
     expect(exam.questions[0].explanation).toContain('Ta có phương trình $2x - 6 = 0');
     expect(exam.questions[0].explanation).toContain('nghiệm của phương trình là x = 3.');
   });
+
+  it('preserves embedded markdown images within question content', () => {
+    const raw = `
+Câu 1. Cho đồ thị như hình vẽ sau:
+![Hình vẽ](data:image/png;base64,sample123)
+Hàm số đã cho đồng biến trên khoảng nào?
+A. (0; 2)
+B. (-1; 1)
+C. (1; 3)
+D. (-infinity; 0)
+Đáp án: A
+    `.trim();
+    const exam = parseExamText(raw, { title: 'Đề thi có hình ảnh' });
+    expect(exam.questions[0].content).toContain('![Hình vẽ](data:image/png;base64,sample123)');
+  });
 });
