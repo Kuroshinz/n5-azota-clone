@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
@@ -97,7 +97,7 @@ export default function ExamTakingPage() {
   const params = useParams();
   const examId = (params?.id as string) || 'sample-exam-1';
 
-  const [exam, setExam] = useState<Exam | null>(null);
+  const [exam, setExam] = useState<Exam>(DEFAULT_SAMPLE_EXAM);
   const [studentName, setStudentName] = useState('Học sinh');
   const [hasStarted, setHasStarted] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);

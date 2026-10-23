@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -81,7 +81,7 @@ const SEED_EXAMS: Exam[] = [
 ];
 
 export default function TeacherExamsPage() {
-  const [exams, setExams] = useState<Exam[]>([]);
+  const [exams, setExams] = useState<Exam[]>(SEED_EXAMS);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
