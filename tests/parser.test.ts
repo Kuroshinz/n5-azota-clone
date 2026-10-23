@@ -51,6 +51,7 @@ D. TypeScript
 
     // Question 1
     expect(exam.questions[0].id).toBe(1);
+    expect(exam.questions[0].type).toBe('multiple_choice');
     expect(exam.questions[0].content).toContain('Thủ đô của Việt Nam là gì?');
     expect(exam.questions[0].options).toHaveLength(4);
     expect(exam.questions[0].options[0]).toEqual({ key: 'A', content: 'Hà Nội' });
@@ -65,6 +66,51 @@ D. TypeScript
     // Question 3
     expect(exam.questions[2].id).toBe(3);
     expect(exam.questions[2].correctAnswer).toBe('D');
+  });
+
+  it('parses Part II: True / False questions with a/b/c/d sub-items', () => {
+    const rawExam = `
+Câu 1: Cho hàm số $y = f(x) = x^3 - 3x$. Các mệnh đề sau đúng hay sai?
+a) Hàm số đồng biến trên khoảng $(1; +\\infty)$.
+b) Hàm số có 2 điểm cực trị.
+c) Giá trị cực tiểu của hàm số bằng 2.
+d) Đồ thị hàm số đi qua gốc tọa độ O.
+Đáp án: a) Đ, b) Đ, c) S, d) Đ
+    `.trim();
+
+    const exam = parseExamText(rawExam);
+
+    expect(exam.questions).toHaveLength(1);
+    const q = exam.questions[0];
+    expect(q.type).toBe('true_false');
+    expect(q.subItems).toHaveLength(4);
+    expect(q.subItems?.[0].key).toBe('a');
+    expect(q.subItems?.[0].correctAnswer).toBe(true);
+    expect(q.subItems?.[1].key).toBe('b');
+    expect(q.subItems?.[1].correctAnswer).toBe(true);
+    expect(q.subItems?.[2].key).toBe('c');
+    expect(q.subItems?.[2].correctAnswer).toBe(false);
+    expect(q.subItems?.[3].key).toBe('d');
+    expect(q.subItems?.[3].correctAnswer).toBe(true);
+  });
+
+  it('parses Part III: Short Answer questions with numerical or text results', () => {
+    const rawExam = `
+Câu 1: Tính diện tích hình chữ nhật có chiều dài 5.5cm và chiều rộng 2cm.
+Đáp án: 11
+
+Câu 2: Tìm giá trị nhỏ nhất của hàm số $f(x) = x^2 - 4x + 5$.
+Đáp số: 1
+    `.trim();
+
+    const exam = parseExamText(rawExam);
+
+    expect(exam.questions).toHaveLength(2);
+    expect(exam.questions[0].type).toBe('short_answer');
+    expect(exam.questions[0].acceptedAnswers).toContain('11');
+
+    expect(exam.questions[1].type).toBe('short_answer');
+    expect(exam.questions[1].acceptedAnswers).toContain('1');
   });
 
   it('handles questions containing math formulas and normalizes delimiters', () => {
