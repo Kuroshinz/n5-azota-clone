@@ -4,11 +4,12 @@ import type { NextRequest } from 'next/server';
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // 1. Allow public auth routes, static files, and internal Next.js assets
+  // 1. Allow public auth routes, parsing APIs, static files, and internal Next.js assets
   if (
     pathname.startsWith('/login') ||
     pathname.startsWith('/register') ||
     pathname.startsWith('/api/auth') ||
+    pathname.startsWith('/api/parser') || // allow PDF and document parser APIs
     pathname.startsWith('/exam/') || // allow public exam room & result pages via QR code / link
     pathname.startsWith('/_next') ||
     pathname.startsWith('/static') ||

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { parseExamText } from '../../../parser/examParser';
 import { extractTextAndImagesFromDocx } from '../../../parser/wordExtractor';
+import { cleanPdfExamText, normalizePdfInlineChoices } from '../../../parser/pdfExtractor';
 import { saveExam } from '../../../storage/examStorage';
 import { QuestionCard } from '../../../components/QuestionCard';
 import { ShareExamModal } from '../../../components/ShareExamModal';
@@ -32,6 +33,13 @@ import {
   Edit3,
   Globe,
   Lock,
+  Wand2,
+  Trash2,
+  PlusCircle,
+  Sigma,
+  FileCheck,
+  RefreshCw,
+  HelpCircle,
 } from 'lucide-react';
 
 const SAMPLE_TEMPLATE = `ĐỀ THI MINH HỌA CHUẨN GDPT 2018
@@ -93,12 +101,16 @@ export default function CreateExamPage() {
 
   // File extraction state
   const [isExtracting, setIsExtracting] = useState(false);
+  const [extractProgressMessage, setExtractProgressMessage] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [extractedInfo, setExtractedInfo] = useState<{
     fileName: string;
     fileSize: string;
-    imageCount: number;
+    fileType: 'pdf' | 'docx' | 'txt';
+    imageCount?: number;
+    pageCount?: number;
+    detectedQuestions?: number;
   } | null>(null);
 
   // Share Modal state
@@ -113,36 +125,96 @@ export default function CreateExamPage() {
     });
   }, [rawText, title, durationMinutes]);
 
-  const handleProcessDocxFile = async (file: File) => {
-    if (!file.name.toLowerCase().endsWith('.docx')) {
-      alert('Vui lòng chọn file định dạng Microsoft Word (.docx)!');
+  // Breakdown of parsed question types
+  const questionTypeStats = useMemo(() => {
+    let mc = 0;
+    let tf = 0;
+    let sa = 0;
+    for (const q of parsedExam.questions) {
+      if (q.type === 'multiple_choice') mc++;
+      else if (q.type === 'true_false') tf++;
+      else if (q.type === 'short_answer') sa++;
+    }
+    return { mc, tf, sa, total: parsedExam.questions.length };
+  }, [parsedExam.questions]);
+
+  // Unified File Processor (Handles PDF, Word DOCX, and TXT)
+  const handleProcessFile = async (file: File) => {
+    const ext = file.name.split('.').pop()?.toLowerCase();
+
+    if (ext !== 'pdf' && ext !== 'docx' && ext !== 'txt') {
+      alert('Vui lòng chọn file định dạng PDF (.pdf), Word (.docx) hoặc Văn bản thuần (.txt)!');
       return;
     }
 
     try {
       setIsExtracting(true);
-      const buffer = await file.arrayBuffer();
-      const result = await extractTextAndImagesFromDocx(buffer);
 
-      setRawText(result.rawText);
-
-      const cleanTitle = file.name.replace(/\.docx$/i, '').trim();
-      if (cleanTitle) {
-        setTitle(cleanTitle);
+      const baseTitle = file.name.replace(/\.[^/.]+$/, '').trim();
+      if (baseTitle && title === 'Đề thi minh họa chuẩn GDPT 2018') {
+        setTitle(baseTitle);
       }
 
-      setExtractedInfo({
-        fileName: file.name,
-        fileSize: `${(file.size / 1024).toFixed(1)} KB`,
-        imageCount: result.imageCount,
-      });
+      // CASE 1: PDF Document
+      if (ext === 'pdf') {
+        setExtractProgressMessage('Đang tải và trích xuất nội dung từ file PDF...');
+        const formData = new FormData();
+        formData.append('file', file);
 
+        const res = await fetch('/api/parser/pdf', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await res.json();
+        if (!data.success) {
+          throw new Error(data.error || 'Không thể trích xuất file PDF');
+        }
+
+        setRawText(data.text);
+        setExtractedInfo({
+          fileName: file.name,
+          fileSize: data.fileSize || `${(file.size / 1024).toFixed(1)} KB`,
+          fileType: 'pdf',
+          pageCount: data.pageCount,
+          detectedQuestions: data.questionCount,
+        });
+      }
+      // CASE 2: Word DOCX Document
+      else if (ext === 'docx') {
+        setExtractProgressMessage('Đang giải nén văn bản, công thức và hình ảnh từ file Word...');
+        const buffer = await file.arrayBuffer();
+        const result = await extractTextAndImagesFromDocx(buffer);
+
+        setRawText(result.rawText);
+        setExtractedInfo({
+          fileName: file.name,
+          fileSize: `${(file.size / 1024).toFixed(1)} KB`,
+          fileType: 'docx',
+          imageCount: result.imageCount,
+        });
+      }
+      // CASE 3: Plain Text File
+      else if (ext === 'txt') {
+        setExtractProgressMessage('Đang đọc văn bản...');
+        const textContent = await file.text();
+        const cleaned = cleanPdfExamText(textContent);
+        setRawText(cleaned);
+        setExtractedInfo({
+          fileName: file.name,
+          fileSize: `${(file.size / 1024).toFixed(1)} KB`,
+          fileType: 'txt',
+        });
+      }
+
+      // Automatically switch to editable text mode for immediate inspection & refinement
       setInputMode('text');
     } catch (err: any) {
-      console.error('Error reading docx:', err);
-      alert('Không thể đọc file Word: ' + (err.message || 'Lỗi không xác định'));
+      console.error('Lỗi khi xử lý file:', err);
+      alert('Lỗi xử lý file: ' + (err.message || 'Không thể đọc nội dung file'));
     } finally {
       setIsExtracting(false);
+      setExtractProgressMessage('');
     }
   };
 
@@ -150,8 +222,36 @@ export default function CreateExamPage() {
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleProcessDocxFile(e.dataTransfer.files[0]);
+      handleProcessFile(e.dataTransfer.files[0]);
     }
+  };
+
+  // Quick Text Editing Utilities
+  const handleNormalizeChoices = () => {
+    const updated = normalizePdfInlineChoices(rawText);
+    setRawText(updated);
+  };
+
+  const handleCleanHeaderFooters = () => {
+    const updated = cleanPdfExamText(rawText);
+    setRawText(updated);
+  };
+
+  const handleInsertTemplate = (type: 'mc' | 'tf' | 'sa' | 'math') => {
+    const nextNum = parsedExam.questions.length + 1;
+    let snippet = '';
+
+    if (type === 'mc') {
+      snippet = `\n\nCâu ${nextNum}: Nhập nội dung câu hỏi trắc nghiệm tại đây.\nA. Phương án A\nB. Phương án B\nC. Phương án C\nD. Phương án D\nĐáp án: A\nHướng dẫn giải:\nGiải thích chi tiết cho câu hỏi tại đây.`;
+    } else if (type === 'tf') {
+      snippet = `\n\nCâu ${nextNum}: Cho giả thiết bài toán... Các khẳng định sau đúng hay sai?\na) Khẳng định 1\nb) Khẳng định 2\nc) Khẳng định 3\nd) Khẳng định 4\nĐáp án: a) Đ, b) S, c) Đ, d) S\nHướng dẫn giải:\nGiải thích chi tiết.`;
+    } else if (type === 'sa') {
+      snippet = `\n\nCâu ${nextNum}: Nhập câu hỏi yêu cầu tính ra đáp số cụ thể.\nĐáp số: 10\nHướng dẫn giải:\nTrình bày các bước tính toán tại đây.`;
+    } else if (type === 'math') {
+      snippet = ` $f(x) = \\int_0^1 \\sqrt{x^2 + 1} dx$ `;
+    }
+
+    setRawText(prev => prev + snippet);
   };
 
   const handleSaveExam = async () => {
@@ -211,11 +311,14 @@ export default function CreateExamPage() {
               <ArrowLeft className="h-4 w-4" />
             </Link>
             <div>
-              <h1 className="text-lg font-bold text-gray-900 leading-tight">
-                Tạo đề thi mới (Tự động bóc tách GDPT 2018)
+              <h1 className="text-lg font-bold text-gray-900 leading-tight flex items-center gap-2">
+                <span>Tạo đề thi thông minh</span>
+                <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-[11px] font-bold text-indigo-700 border border-indigo-200">
+                  Chuẩn GDPT 2018
+                </span>
               </h1>
-              <p className="text-xs text-gray-500">
-                Nhận diện tự động Trắc nghiệm A/B/C/D, Đúng/Sai 4 ý, Điền đáp số & Công thức Toán KaTeX
+              <p className="text-xs text-gray-500 mt-0.5">
+                Hỗ trợ tải lên file <strong>PDF</strong>, <strong>Word (.docx)</strong> hoặc văn bản để tự động bóc tách & chỉnh sửa
               </p>
             </div>
           </div>
@@ -315,12 +418,12 @@ export default function CreateExamPage() {
           </div>
         </div>
 
-        {/* Two-Column Layout */}
+        {/* Two-Column Editor Layout */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {/* Column 1: Source Input (Upload Word or Raw Text) */}
+          {/* Column 1: Source Input (PDF / Word / Text) */}
           <div className="flex flex-col rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-            {/* Tabs */}
-            <div className="flex items-center justify-between border-b border-gray-200 bg-slate-50/70 px-4 py-2.5">
+            {/* Tabs & Extraction Info */}
+            <div className="flex flex-wrap items-center justify-between border-b border-gray-200 bg-slate-50/80 px-4 py-2.5 gap-2">
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -332,7 +435,7 @@ export default function CreateExamPage() {
                   }`}
                 >
                   <UploadCloud className="h-3.5 w-3.5" />
-                  <span>Tải file Word (.docx)</span>
+                  <span>Kéo thả file (PDF / Word)</span>
                 </button>
                 <button
                   type="button"
@@ -344,20 +447,42 @@ export default function CreateExamPage() {
                   }`}
                 >
                   <FileCode className="h-3.5 w-3.5" />
-                  <span>Chỉnh sửa văn bản thô</span>
+                  <span>Soạn thảo & Chỉnh sửa</span>
                 </button>
               </div>
 
               {extractedInfo && (
-                <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
-                  <CheckCircle2 className="h-3 w-3" />
-                  {extractedInfo.fileName} ({extractedInfo.imageCount} ảnh)
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${
+                    extractedInfo.fileType === 'pdf'
+                      ? 'bg-rose-100 text-rose-700'
+                      : extractedInfo.fileType === 'docx'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {extractedInfo.fileType}
+                  </span>
+                  <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                    <span className="truncate max-w-[150px]" title={extractedInfo.fileName}>
+                      {extractedInfo.fileName}
+                    </span>
+                    {extractedInfo.pageCount && <span>({extractedInfo.pageCount} trang)</span>}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-600 hover:bg-gray-100 transition"
+                    title="Đổi file khác"
+                  >
+                    Đổi file
+                  </button>
+                </div>
               )}
             </div>
 
             {/* Input Body */}
-            <div className="flex-1 p-4">
+            <div className="flex-1 p-4 flex flex-col">
               {inputMode === 'upload' ? (
                 <div
                   onDragOver={e => {
@@ -366,19 +491,19 @@ export default function CreateExamPage() {
                   }}
                   onDragLeave={() => setIsDragging(false)}
                   onDrop={handleDrop}
-                  className={`flex h-96 flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 text-center transition ${
+                  className={`flex h-[520px] flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 text-center transition ${
                     isDragging
-                      ? 'border-indigo-500 bg-indigo-50/50'
-                      : 'border-gray-300 bg-slate-50/50 hover:border-gray-400'
+                      ? 'border-indigo-500 bg-indigo-50/60 shadow-inner'
+                      : 'border-gray-300 bg-slate-50/50 hover:border-indigo-400'
                   }`}
                 >
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".docx"
+                    accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
                     onChange={e => {
                       if (e.target.files && e.target.files.length > 0) {
-                        handleProcessDocxFile(e.target.files[0]);
+                        handleProcessFile(e.target.files[0]);
                       }
                     }}
                     className="hidden"
@@ -386,26 +511,48 @@ export default function CreateExamPage() {
 
                   {isExtracting ? (
                     <div className="flex flex-col items-center gap-3">
-                      <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
-                      <p className="text-xs font-semibold text-gray-700">
-                        Đang đọc văn bản, bóc tách cấu trúc câu hỏi & hình ảnh từ file Word...
+                      <div className="relative">
+                        <div className="h-14 w-14 rounded-2xl bg-indigo-50 flex items-center justify-center">
+                          <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+                        </div>
+                      </div>
+                      <h4 className="text-sm font-bold text-gray-800">Đang phân tích cấu trúc tài liệu...</h4>
+                      <p className="text-xs text-gray-500 max-w-sm">
+                        {extractProgressMessage || 'Hệ thống đang trích xuất văn bản, bảng đáp án và công thức toán học...'}
                       </p>
                     </div>
                   ) : (
                     <>
-                      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 shadow-xs">
-                        <UploadCloud className="h-7 w-7" />
+                      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 shadow-sm">
+                        <UploadCloud className="h-8 w-8" />
                       </div>
-                      <h3 className="text-sm font-bold text-gray-800">
-                        Kéo thả file Word (.docx) đề thi vào đây
+                      <h3 className="text-base font-bold text-gray-900">
+                        Kéo thả file Đề thi vào đây
                       </h3>
-                      <p className="mt-1 text-xs text-gray-500 max-w-xs">
-                        Hệ thống tự động nhận diện chữ, bảng biểu, công thức Toán học KaTeX và trích xuất ảnh minh họa.
+                      <p className="mt-1 text-xs text-gray-500 max-w-sm leading-relaxed">
+                        Hỗ trợ định dạng <strong>PDF (.pdf)</strong>, <strong>Word (.docx)</strong> hoặc <strong>Text (.txt)</strong>.
+                        Tự động nhận diện câu hỏi trắc nghiệm, đúng/sai, trả lời ngắn và công thức KaTeX.
                       </p>
+
+                      <div className="flex items-center gap-2 my-4">
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-rose-50 border border-rose-200 px-2.5 py-1 text-xs font-bold text-rose-700">
+                          <FileText className="h-3.5 w-3.5" />
+                          Adobe PDF (.pdf)
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-blue-50 border border-blue-200 px-2.5 py-1 text-xs font-bold text-blue-700">
+                          <FileText className="h-3.5 w-3.5" />
+                          Word (.docx)
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 border border-slate-200 px-2.5 py-1 text-xs font-bold text-slate-700">
+                          <FileCode className="h-3.5 w-3.5" />
+                          Văn bản (.txt)
+                        </span>
+                      </div>
+
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="mt-5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition cursor-pointer"
+                        className="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition cursor-pointer"
                       >
                         Chọn file từ máy tính
                       </button>
@@ -414,38 +561,115 @@ export default function CreateExamPage() {
                 </div>
               ) : (
                 <div className="flex h-full flex-col">
+                  {/* Smart Text Action Toolbar */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 border border-slate-200 p-2 mb-3">
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                      <span className="text-[11px] font-bold text-gray-500 uppercase mr-1">Xử lý nhanh:</span>
+                      <button
+                        type="button"
+                        onClick={handleNormalizeChoices}
+                        className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 font-semibold text-gray-700 hover:bg-gray-100 hover:border-indigo-300 transition"
+                        title="Tách các đáp án A, B, C, D nằm cùng hàng thành từng dòng riêng biệt"
+                      >
+                        <Wand2 className="h-3 w-3 text-indigo-600" />
+                        <span>Chuẩn hóa A/B/C/D</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleCleanHeaderFooters}
+                        className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 font-semibold text-gray-700 hover:bg-gray-100 hover:border-indigo-300 transition"
+                        title="Xóa bỏ các số trang 'Trang 1/5' hoặc tiêu đề lặp lại"
+                      >
+                        <Trash2 className="h-3 w-3 text-rose-600" />
+                        <span>Lọc bỏ số trang/rác</span>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => handleInsertTemplate('mc')}
+                        className="rounded-lg bg-indigo-50 border border-indigo-200 px-2 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100 transition"
+                        title="Chèn mẫu trắc nghiệm 4 lựa chọn"
+                      >
+                        + Trắc nghiệm
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleInsertTemplate('tf')}
+                        className="rounded-lg bg-emerald-50 border border-emerald-200 px-2 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 transition"
+                        title="Chèn mẫu đúng / sai 4 ý"
+                      >
+                        + Đúng/Sai
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleInsertTemplate('sa')}
+                        className="rounded-lg bg-purple-50 border border-purple-200 px-2 py-1 text-[11px] font-bold text-purple-700 hover:bg-purple-100 transition"
+                        title="Chèn mẫu trả lời ngắn"
+                      >
+                        + Điền đáp số
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleInsertTemplate('math')}
+                        className="rounded-lg bg-amber-50 border border-amber-200 px-2 py-1 text-[11px] font-bold text-amber-700 hover:bg-amber-100 transition flex items-center gap-0.5"
+                        title="Chèn mẫu công thức Toán KaTeX"
+                      >
+                        <Sigma className="h-3 w-3" />
+                        <span>Công thức</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Textarea for Direct Live Editing */}
                   <textarea
                     value={rawText}
                     onChange={e => setRawText(e.target.value)}
-                    placeholder="Dán nội dung đề thi vào đây..."
-                    className="h-96 w-full resize-none font-mono text-xs leading-relaxed text-gray-800 focus:outline-none"
+                    placeholder="Dán hoặc chỉnh sửa nội dung đề thi tại đây..."
+                    className="h-[460px] w-full resize-none rounded-xl border border-gray-200 p-3.5 font-mono text-xs leading-relaxed text-gray-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
                   />
                 </div>
               )}
             </div>
           </div>
 
-          {/* Column 2: Live Parsed Preview */}
+          {/* Column 2: Live Real-time Visual Preview */}
           <div className="flex flex-col rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between border-b border-gray-200 bg-slate-50/70 px-4 py-3">
+            {/* Live Stats Header */}
+            <div className="flex flex-wrap items-center justify-between border-b border-gray-200 bg-slate-50/80 px-4 py-3 gap-2">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-indigo-600" />
                 <h2 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
-                  Xem trước trực quan ({parsedExam.questions.length} câu)
+                  Xem trước trực quan ({questionTypeStats.total} câu)
                 </h2>
               </div>
-              <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-bold text-indigo-700">
-                Thang 10 điểm
-              </span>
+
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 text-[11px] font-bold text-indigo-700">
+                  Phần I: {questionTypeStats.mc}
+                </span>
+                <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
+                  Phần II: {questionTypeStats.tf}
+                </span>
+                <span className="rounded-full bg-purple-50 border border-purple-200 px-2.5 py-0.5 text-[11px] font-bold text-purple-700">
+                  Phần III: {questionTypeStats.sa}
+                </span>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-700">
+                  10.00 đ
+                </span>
+              </div>
             </div>
 
-            <div className="flex-1 max-h-[720px] overflow-y-auto p-4 space-y-4">
+            {/* Questions List */}
+            <div className="flex-1 max-h-[580px] overflow-y-auto p-4 space-y-4">
               {parsedExam.questions.length === 0 ? (
                 <div className="flex h-96 flex-col items-center justify-center text-center text-gray-400">
                   <BookOpen className="mb-2 h-10 w-10 opacity-30" />
-                  <p className="text-xs font-semibold">Chưa có câu hỏi nào được bóc tách</p>
-                  <p className="text-[11px] mt-1 max-w-xs">
-                    Vui lòng tải file Word hoặc nhập nội dung theo mẫu chuẩn câu hỏi (Câu 1, Câu 2...)
+                  <p className="text-xs font-semibold text-gray-600">Chưa có câu hỏi nào được bóc tách</p>
+                  <p className="text-[11px] text-gray-400 mt-1 max-w-xs">
+                    Kéo thả file <strong>PDF</strong>, <strong>Word</strong> hoặc nhập theo mẫu chuẩn GDPT (Câu 1, Câu 2...) để hệ thống tự động nhận diện.
                   </p>
                 </div>
               ) : (
