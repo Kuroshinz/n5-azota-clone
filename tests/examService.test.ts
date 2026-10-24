@@ -135,14 +135,14 @@ D. 4
         3: '2,0', // Correct normalized (+0.5)
       },
       proctoringReport: {
-        totalViolations: 2,
-        tabSwitches: 1,
-        fullscreenExits: 1,
-        timeline: [
+        outScreenCount: 2,
+        fullscreenExitCount: 1,
+        totalOutDurationSeconds: 15,
+        events: [
           {
-            timestamp: new Date().toISOString(),
+            timestamp: Date.now(),
             type: 'out_screen',
-            message: 'Thí sinh chuyển tab',
+            details: 'Thí sinh chuyển tab',
           },
         ],
       },
@@ -150,7 +150,7 @@ D. 4
 
     expect(submission.score).toBe(1.75); // 0.25 + 1.0 + 0.5
     expect(submission.studentName).toBe('Nguyễn Văn A');
-    expect(submission.proctoringReport.totalViolations).toBe(2);
+    expect(submission.proctoringReport.outScreenCount).toBe(2);
 
     // Verify submission row directly in SQLite
     const subDb = await prisma.submission.findUnique({ where: { id: submission.id } });
