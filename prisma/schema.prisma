@@ -13,6 +13,7 @@ model Exam {
   durationMinutes Int          @default(45)
   totalQuestions  Int          @default(0)
   questionsJson   String
+  settingsJson    String       @default("{}")
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
   submissions     Submission[]
