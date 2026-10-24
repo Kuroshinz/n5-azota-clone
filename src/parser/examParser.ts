@@ -63,27 +63,40 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
     });
   }
 
-  const totalQuestions = rawBlocks.length;
+  // Filter out chapter/lesson headers (e.g. "Bài 1: Khái quát...") when followed immediately by Question 1
+  const validBlocks = rawBlocks.filter((block, i) => {
+    const next = rawBlocks[i + 1];
+    const hasOptions = /(?:^|\n|\t|\s{2,}|(?<=[.!?,\)\]])\s+|\s+(?=[A-D][.:\)]))(\*?)[A-D][\s.:\)]+/i.test(block.rawText);
+    const hasSubItems = /(?:^|\n|\t|\s{2,})[a-d][\s.:\)]+/i.test(block.rawText);
+    const hasAnswer = /(?:^|\n)(?:Đáp án|Đáp số|Chọn|Key|Kết quả|ĐA)[\s.:]+/i.test(block.rawText);
+
+    if (/^Bài\s*\d+/i.test(block.rawText) && !hasOptions && !hasSubItems && !hasAnswer && next && next.qNum === 1) {
+      return false;
+    }
+    return true;
+  });
+
+  const totalQuestions = validBlocks.length;
   const scorePerQuestion = totalQuestions > 0 ? Number((10 / totalQuestions).toFixed(2)) : 0;
 
   // Step 4: Parse each question block
-  const questions: Question[] = rawBlocks.map((block, index) => {
+  const questions: Question[] = validBlocks.map((block, index) => {
     let blockContent = block.rawText;
     let explanation: string | undefined = undefined;
     let detectedAnswer: OptionKey | undefined = undefined;
     let acceptedAnswers: string[] | undefined = undefined;
     let subItems: SubQuestionItem[] | undefined = undefined;
 
-    // Check for explanation: Lời giải / Hướng dẫn giải / Giải thích
-    const expMatch = blockContent.match(/(?:^|\n)(?:Lời giải|Hướng dẫn giải|Giải thích)[\s.:]+([\s\S]*)$/i);
+    // Check for explanation: Lời giải / Hướng dẫn giải / Giải thích / HDG
+    const expMatch = blockContent.match(/(?:^|\n)(?:Lời giải|Hướng dẫn giải|Giải thích|HDG)[\s.:]+([\s\S]*)$/i);
     if (expMatch && expMatch.index !== undefined) {
       explanation = expMatch[1].trim();
       blockContent = blockContent.substring(0, expMatch.index).trim();
     }
 
-    // Extract answer line if present: e.g. "Đáp án: A", "Đáp án: a) Đ, b) S", "Đáp số: 12.5"
+    // Extract answer line if present: e.g. "Đáp án: A", "Đáp án: a) Đ, b) S", "Đáp số: 12.5", "ĐA. 3"
     let rawAnswerLine = '';
-    const ansMatch = blockContent.match(/(?:^|\n)(?:Đáp án|Đáp số|Chọn|Key|Kết quả)[\s.:]+([^\n\r]+)/i);
+    const ansMatch = blockContent.match(/(?:^|\n)(?:Đáp án|Đáp số|Chọn|Key|Kết quả|ĐA)[\s.:]+([^\n\r]+)/i);
     if (ansMatch && ansMatch.index !== undefined) {
       rawAnswerLine = ansMatch[1].trim();
       blockContent = blockContent.substring(0, ansMatch.index) + blockContent.substring(ansMatch.index + ansMatch[0].length);
@@ -97,7 +110,7 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
     }
 
     // Check for Part II True/False sub-items matching a), b), c), d)
-    const subItemRegex = /(?:^|\n|\s{2,})([a-d])[\s.:\)]+\s*/g;
+    const subItemRegex = /(?:^|\n|\t|\s{2,})([a-d])[\s.:\)]+\s*/g;
     const subMatches: { index: number; length: number; key: 'a' | 'b' | 'c' | 'd' }[] = [];
     let subMatch: RegExpExecArray | null;
 
@@ -109,8 +122,8 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
       });
     }
 
-    // Check for Part I Multiple Choice options A, B, C, D
-    const optionRegex = /(?:^|\n|\s{2,})(\*?)([A-D])[\s.:\)]+\s*/g;
+    // Check for Part I Multiple Choice options A, B, C, D (supports tabs, newlines, or multiple/single spaces before option)
+    const optionRegex = /(?:^|\n|\t|\s{2,}|(?<=[.!?,\)\]])\s+|\s+(?=[A-D][.:\)]))(\*?)([A-D])[\s.:\)]+\s*/g;
     const optionMatches: { index: number; length: number; isAsterisk: boolean; key: OptionKey }[] = [];
     let optMatch: RegExpExecArray | null;
 
