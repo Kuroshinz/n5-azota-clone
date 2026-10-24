@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { normalizeMathFormulas } from '../src/parser/mathConverter';
-import { parseExamText } from '../src/parser/examParser';
+import { parseExamText, distributeExamScores } from '../src/parser/examParser';
 
 describe('Math Converter Engine', () => {
   it('converts LaTeX parenthetical delimiters \\( ... \\) to $ ... $ and brackets \\[ ... \\] to $$ ... $$', () => {
@@ -17,6 +17,17 @@ describe('Math Converter Engine', () => {
 });
 
 describe('Vietnamese Exam Parser Engine', () => {
+  it('distributes scores accurately for 68 questions without round-off drift', () => {
+    // Using imported distributeExamScores
+    const scores = distributeExamScores(68, 10);
+    expect(scores).toHaveLength(68);
+    // 48 questions * 0.15 + 20 questions * 0.14 = 10.00
+    const total = scores.reduce((sum, s) => sum + s, 0);
+    expect(Number(total.toFixed(2))).toBe(10.00);
+    expect(scores[0]).toBe(0.15);
+    expect(scores[67]).toBe(0.14);
+  });
+
   it('parses standard 3-question Vietnamese test with A/B/C/D options and inline answer keys', () => {
     const rawExam = `
 ĐỀ THI KHẢO SÁT CHẤT LƯỢNG
@@ -57,7 +68,8 @@ D. TypeScript
     expect(exam.questions[0].options[0]).toEqual({ key: 'A', content: 'Hà Nội' });
     expect(exam.questions[0].options[1]).toEqual({ key: 'B', content: 'TP. Hồ Chí Minh' });
     expect(exam.questions[0].correctAnswer).toBe('A');
-    expect(exam.questions[0].score).toBe(3.33);
+    expect(exam.questions[0].score).toBe(3.34);
+    expect(Number(exam.questions.reduce((sum, q) => sum + q.score, 0).toFixed(2))).toBe(10.00);
 
     // Question 2
     expect(exam.questions[1].id).toBe(2);

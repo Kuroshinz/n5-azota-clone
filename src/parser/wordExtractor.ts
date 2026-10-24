@@ -1,80 +1,120 @@
-import mammoth from 'mammoth';
+import * as mammoth from 'mammoth';
 
-export interface WordExtractionResult {
+export interface ExtractedDocxResult {
   rawText: string;
   imageCount: number;
 }
 
+/**
+ * Normalizes tab and multi-space separated inline options (e.g., "A. 1 \t B. 2 \t C. 3 \t D. 4")
+ * into distinct newlines so that standard line-based question parsers can reliably match them.
+ */
+export function normalizeInlineChoices(text: string): string {
+  // If a line contains multiple options separated by tabs or multiple spaces
+  return text
+    .split(/\r?\n/)
+    .map((line) => {
+      // Split on tabs or 3+ spaces if followed by an option indicator like B., C., D. or b), c), d)
+      return line
+        .replace(/\t+([A-D]\.|\([A-D]\)|[a-d]\)|\([a-d]\))/g, '\n$1')
+        .replace(/ {3,}([A-D]\.|\([A-D]\)|[a-d]\)|\([a-d]\))/g, '\n$1');
+    })
+    .join('\n');
+}
+
+/**
+ * Converts HTML exported from Mammoth into structured exam text suitable for parseExamText.
+ */
 export function convertDocxHtmlToExamText(html: string): { text: string; imageCount: number } {
   let imageCount = 0;
 
-  // Replace images with markdown format: ![Hình vẽ](data:image/...)
-  let processed = html.replace(/<img\s+[^>]*src="([^"]+)"[^>]*>/gi, (_match, src) => {
+  // 1. Replace <img> with Markdown image syntax ![Hình vẽ](data:...)
+  let converted = html.replace(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi, (_match, src) => {
     imageCount++;
-    return `\n\n![Hình vẽ](${src})\n\n`;
+    return `\n![Hình vẽ](${src})\n`;
   });
 
-  // Table handling: separate cells within row with space, rows with newline
-  processed = processed.replace(/<\/td>\s*<td[^>]*>/gi, ' ');
-  processed = processed.replace(/<\/tr>\s*<tr[^>]*>/gi, '\n');
-  processed = processed.replace(/<\/?(table|tbody|thead|tr|td|th)[^>]*>/gi, '\n');
+  // 2. Replace paragraphs and line breaks
+  converted = converted.replace(/<\/p>/gi, '\n');
+  converted = converted.replace(/<br\s*\/?>/gi, '\n');
+  converted = converted.replace(/<\/li>/gi, '\n');
+  converted = converted.replace(/<\/tr>/gi, '\n');
+  converted = converted.replace(/<\/td>/gi, ' ');
 
-  // Paragraph & break handling
-  processed = processed.replace(/<p[^>]*>/gi, '\n');
-  processed = processed.replace(/<\/p>/gi, '\n');
-  processed = processed.replace(/<br\s*\/?>/gi, '\n');
+  // 3. Strip remaining HTML tags
+  let plainText = converted.replace(/<[^>]+>/g, '');
 
-  // Strip other HTML tags
-  processed = processed.replace(/<[^>]+>/g, '');
+  // 4. Decode common HTML entities
+  plainText = plainText
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
 
-  // Decode non-breaking spaces and clean whitespace
-  processed = processed.replace(/&nbsp;/g, ' ');
-  processed = processed.replace(/\u00A0/g, ' ');
-
-  // Convert tab alignment to newline so inline options A, B, C, D become cleanly separated lines
-  processed = processed.replace(/\t+/g, '\n');
-
-  // Clean consecutive spaces
-  processed = processed.replace(/[^\S\r\n]+/g, ' ');
-  processed = processed.replace(/\n\s+\n/g, '\n\n');
-  processed = processed.replace(/\n{3,}/g, '\n\n');
+  // 5. Normalize inline choices split by tabs or spaces
+  plainText = normalizeInlineChoices(plainText);
 
   return {
-    text: processed.trim(),
+    text: plainText,
     imageCount,
   };
 }
 
-export async function extractTextAndImagesFromDocx(buffer: ArrayBuffer | Buffer): Promise<WordExtractionResult> {
-  const imageHandler = (element: any) => {
-    return element.read('base64').then((imageBuffer: string) => {
+/**
+ * Extracts raw text and converts embedded images into base64 Data URIs
+ * from a Microsoft Word (.docx) buffer.
+ */
+export async function extractTextAndImagesFromDocx(
+  buffer: ArrayBuffer | Buffer
+): Promise<ExtractedDocxResult> {
+  let imageCount = 0;
+
+  try {
+    const imageHandler = async (element: any) => {
+      imageCount++;
+      const bufferData = await element.read();
+      const contentType = element.contentType || 'image/png';
+      const base64 =
+        typeof Buffer !== 'undefined'
+          ? Buffer.from(bufferData).toString('base64')
+          : btoa(
+              new Uint8Array(bufferData).reduce(
+                (data, byte) => data + String.fromCharCode(byte),
+                ''
+              )
+            );
       return {
-        src: `data:${element.contentType};base64,${imageBuffer}`,
+        src: `data:${contentType};base64,${base64}`,
       };
-    });
-  };
+    };
 
-  // Safe converter supporting all versions of mammoth
-  const convertImage =
-    mammoth.images && typeof mammoth.images.imgElement === 'function'
-      ? mammoth.images.imgElement(imageHandler)
-      : mammoth.images && typeof (mammoth.images as any).inline === 'function'
-      ? (mammoth.images as any).inline(imageHandler)
-      : undefined;
+    const mammothImages = mammoth.images as any;
+    const convertImage =
+      mammothImages && typeof mammothImages.imgElement === 'function'
+        ? mammothImages.imgElement(imageHandler)
+        : mammothImages && typeof mammothImages.inline === 'function'
+        ? mammothImages.inline(imageHandler)
+        : mammothImages && typeof mammothImages.inlineImage === 'function'
+        ? mammothImages.inlineImage(imageHandler)
+        : undefined;
 
-  const options = convertImage ? { convertImage } : {};
+    // Convert Word document to HTML with embedded images
+    // Mammoth expects buffer in options
+    const htmlResult = await mammoth.convertToHtml(
+      { buffer: buffer as any, arrayBuffer: buffer as any },
+      convertImage ? { convertImage } : undefined
+    );
 
-  // Support both browser ArrayBuffer and Node Buffer under 'buffer' and 'arrayBuffer'
-  const input = {
-    buffer: buffer as any,
-    arrayBuffer: buffer as any,
-  };
+    const converted = convertDocxHtmlToExamText(htmlResult.value);
 
-  const { value: html } = await mammoth.convertToHtml(input, options);
-  const { text, imageCount } = convertDocxHtmlToExamText(html);
-
-  return {
-    rawText: text,
-    imageCount,
-  };
+    return {
+      rawText: converted.text,
+      imageCount: imageCount > 0 ? imageCount : converted.imageCount,
+    };
+  } catch (err: any) {
+    console.error('Lỗi khi phân tích tệp .docx:', err);
+    throw new Error(`Không thể giải nén tài liệu Word: ${err.message}`);
+  }
 }

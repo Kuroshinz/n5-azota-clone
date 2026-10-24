@@ -1,3 +1,20 @@
+/**
+ * Accurately distribute a target total score (default: 10.00) across N questions
+ * ensuring the sum of scores is EXACTLY targetTotalScore with zero round-off drift.
+ * (e.g. for 68 questions: 48 questions receive 0.15 and 20 receive 0.14 -> exactly 10.00)
+ */
+export function distributeExamScores(totalQuestions: number, targetTotalScore = 10): number[] {
+  if (totalQuestions <= 0) return [];
+  const targetCents = Math.round(targetTotalScore * 100);
+  const baseCents = Math.floor(targetCents / totalQuestions);
+  const remainderCents = targetCents % totalQuestions;
+
+  return Array.from({ length: totalQuestions }, (_, i) => {
+    const cents = i < remainderCents ? baseCents + 1 : baseCents;
+    return Number((cents / 100).toFixed(2));
+  });
+}
+
 import { Exam, Option, OptionKey, Question, QuestionType, SubQuestionItem } from '../types/exam';
 import { normalizeMathFormulas } from './mathConverter';
 
@@ -77,7 +94,7 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
   });
 
   const totalQuestions = validBlocks.length;
-  const scorePerQuestion = totalQuestions > 0 ? Number((10 / totalQuestions).toFixed(2)) : 0;
+  const questionScores = distributeExamScores(totalQuestions, 10);
 
   // Step 4: Parse each question block
   const questions: Question[] = validBlocks.map((block, index) => {
@@ -227,7 +244,7 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
       subItems,
       acceptedAnswers,
       explanation,
-      score: scorePerQuestion,
+      score: questionScores[index] ?? 0.25,
     };
   });
 

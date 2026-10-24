@@ -163,4 +163,26 @@ D. 4
     expect(subs).toHaveLength(1);
     expect(subs[0].id).toBe(submission.id);
   });
+
+  it('deletes an exam and its associated submissions from SQLite', async () => {
+    await examService.saveExam(sampleExam);
+    await examService.submitExam({
+      examId: sampleExam.id,
+      studentName: 'Học sinh test',
+      answers: { 1: 'A' },
+      proctoringReport: { outScreenCount: 0, fullscreenExitCount: 0, totalOutDurationSeconds: 0, events: [] },
+    });
+
+    const beforeDelete = await examService.getExam(sampleExam.id);
+    expect(beforeDelete).not.toBeNull();
+
+    const result = await examService.deleteExam(sampleExam.id);
+    expect(result).toBe(true);
+
+    const afterDelete = await examService.getExam(sampleExam.id);
+    expect(afterDelete).toBeNull();
+
+    const remainingSubs = await examService.getSubmissions(sampleExam.id);
+    expect(remainingSubs).toHaveLength(0);
+  });
 });

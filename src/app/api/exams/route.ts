@@ -1,30 +1,64 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { examService } from '@/server/examService';
+import { getAuthUser } from '@/server/authService';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const exams = await examService.listExams();
+    const currentUser = getAuthUser(request);
+    if (!currentUser) {
+      return NextResponse.json({ success: true, exams: [] });
+    }
+
+    // Only return exams created by the currently authenticated user
+    const exams = await examService.listExams(currentUser.userId);
     return NextResponse.json({ success: true, exams });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const currentUser = getAuthUser(request);
+    if (!currentUser) {
+      return NextResponse.json(
+        { success: false, error: 'Vui lòng đăng nhập để tạo đề thi' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
+    const authorId = currentUser.userId;
+
     if (body.rawText) {
       const exam = await examService.createExamFromText(body.rawText, {
         title: body.title,
         durationMinutes: body.durationMinutes ? Number(body.durationMinutes) : 45,
         settings: body.settings,
+        authorId,
+        isPublic: body.isPublic !== undefined ? Boolean(body.isPublic) : true,
       });
       return NextResponse.json({ success: true, exam });
     }
 
-    if (body.exam) {
-      await examService.saveExam(body.exam);
-      return NextResponse.json({ success: true, exam: body.exam });
+    const targetExam = body.exam || (body.id && body.title && body.questions ? body : null);
+
+    if (targetExam) {
+      const targetId = targetExam.id;
+      if (targetId) {
+        const existing = await examService.getExam(targetId);
+        if (existing && existing.authorId && existing.authorId !== authorId) {
+          return NextResponse.json(
+            { success: false, error: 'Bạn không có quyền chỉnh sửa đề thi của người khác' },
+            { status: 403 }
+          );
+        }
+      }
+
+      targetExam.authorId = authorId;
+      if (targetExam.isPublic === undefined) targetExam.isPublic = true;
+      await examService.saveExam(targetExam);
+      return NextResponse.json({ success: true, exam: targetExam });
     }
 
     return NextResponse.json({ success: false, error: 'Thiếu rawText hoặc exam payload' }, { status: 400 });

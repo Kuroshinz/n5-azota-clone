@@ -207,3 +207,6 @@ export function getSubmission(id: string): Submission | null {
   const all = getSubmissions();
   return all.find(s => s.id === id) || null;
 }
+
+export const getStoredExams = listExams;
+

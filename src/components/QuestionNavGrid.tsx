@@ -1,24 +1,26 @@
 'use client';
 
 import React from 'react';
-import { StudentAnswerValue } from '../types/exam';
+import { Question, StudentAnswerValue } from '../types/exam';
 
 interface QuestionNavGridProps {
-  totalQuestions: number;
+  questions?: Question[];
+  totalQuestions?: number;
   answers: Record<number, StudentAnswerValue>;
   flaggedQuestionIds: Set<number>;
   activeQuestionId?: number;
-  onSelectQuestion: (id: number) => void;
+  onSelectQuestion: (questionId: number, displayNumber: number) => void;
 }
 
 export const QuestionNavGrid: React.FC<QuestionNavGridProps> = ({
+  questions,
   totalQuestions,
   answers,
   flaggedQuestionIds,
   activeQuestionId,
   onSelectQuestion,
 }) => {
-  const qIds = Array.from({ length: totalQuestions }, (_, i) => i + 1);
+  const count = questions ? questions.length : (totalQuestions ?? 0);
 
   const isQuestionAnswered = (val: StudentAnswerValue | undefined): boolean => {
     if (val === undefined || val === null) return false;
@@ -27,41 +29,57 @@ export const QuestionNavGrid: React.FC<QuestionNavGridProps> = ({
     return false;
   };
 
-  const answeredCount = qIds.filter(id => isQuestionAnswered(answers[id])).length;
+  // If questions array is passed, use its items; otherwise fallback to 1..count IDs
+  const items = questions
+    ? questions.map((q, idx) => ({
+        displayNumber: idx + 1,
+        questionId: q.id,
+        isAnswered: isQuestionAnswered(answers[q.id]),
+        isFlagged: flaggedQuestionIds.has(q.id),
+        isActive: activeQuestionId === q.id,
+      }))
+    : Array.from({ length: count }, (_, idx) => {
+        const id = idx + 1;
+        return {
+          displayNumber: id,
+          questionId: id,
+          isAnswered: isQuestionAnswered(answers[id]),
+          isFlagged: flaggedQuestionIds.has(id),
+          isActive: activeQuestionId === id,
+        };
+      });
+
+  const answeredCount = items.filter(item => item.isAnswered).length;
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between text-xs font-medium text-gray-500">
-        <span className="font-semibold text-gray-800">Bảng câu hỏi ({answeredCount}/{totalQuestions})</span>
+        <span className="font-semibold text-gray-800">Bảng câu hỏi ({answeredCount}/{count})</span>
       </div>
 
       <div className="grid grid-cols-5 gap-2 max-h-64 overflow-y-auto p-1">
-        {qIds.map(id => {
-          const isAnswered = isQuestionAnswered(answers[id]);
-          const isFlagged = flaggedQuestionIds.has(id);
-          const isActive = activeQuestionId === id;
-
+        {items.map(item => {
           let bg = 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200';
-          if (isAnswered) {
+          if (item.isAnswered) {
             bg = 'bg-indigo-600 text-white border-indigo-700 shadow-sm';
           }
-          if (isFlagged) {
-            bg = isAnswered
+          if (item.isFlagged) {
+            bg = item.isAnswered
               ? 'bg-amber-500 text-white border-amber-600'
               : 'bg-amber-100 text-amber-800 border-amber-300 font-semibold';
           }
 
           return (
             <button
-              key={id}
+              key={item.displayNumber}
               type="button"
-              onClick={() => onSelectQuestion(id)}
+              onClick={() => onSelectQuestion(item.questionId, item.displayNumber)}
               className={`relative flex h-9 w-full items-center justify-center rounded-lg border text-xs font-bold transition ${bg} ${
-                isActive ? 'ring-2 ring-indigo-500 ring-offset-1' : ''
+                item.isActive ? 'ring-2 ring-indigo-500 ring-offset-1' : ''
               }`}
             >
-              {id}
-              {isFlagged && (
+              {item.displayNumber}
+              {item.isFlagged && (
                 <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-white" />
               )}
             </button>

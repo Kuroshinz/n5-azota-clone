@@ -88,13 +88,15 @@ describe('Exam Settings Utilities', () => {
       {
         id: 2,
         type: 'true_false',
-        content: 'Câu 2: Xét tính đúng sai',
-        rawText: 'Câu 2: Xét tính đúng sai',
+        content: 'Câu 2: Xét tính đúng sai của hàm số',
+        rawText: 'Câu 2: Xét tính đúng sai của hàm số',
         score: 1.0,
         options: [],
         subItems: [
           { key: 'a', content: 'Ý 1', correctAnswer: true },
           { key: 'b', content: 'Ý 2', correctAnswer: false },
+          { key: 'c', content: 'Ý 3', correctAnswer: true },
+          { key: 'd', content: 'Ý 4', correctAnswer: false },
         ],
       },
       {
@@ -127,6 +129,24 @@ describe('Exam Settings Utilities', () => {
       const q1 = result.find((q) => q.id === 1);
       expect(q1?.options).toHaveLength(4);
       expect(q1?.correctAnswer).toBe('A');
+    });
+
+    it('NEVER alters or scrambles True/False subItems a, b, c, d when shuffling', () => {
+      const result = shuffleExamQuestions(mockQuestions, true, true);
+      const tfQ = result.find((q) => q.id === 2)!;
+      expect(tfQ).toBeDefined();
+      expect(tfQ.type).toBe('true_false');
+      expect(tfQ.subItems).toHaveLength(4);
+
+      // Sub-items keys must always remain in order a, b, c, d
+      const subKeys = tfQ.subItems!.map((item) => item.key);
+      expect(subKeys).toEqual(['a', 'b', 'c', 'd']);
+
+      // Sub-items content and answers must remain unchanged
+      expect(tfQ.subItems![0].content).toBe('Ý 1');
+      expect(tfQ.subItems![0].correctAnswer).toBe(true);
+      expect(tfQ.subItems![1].content).toBe('Ý 2');
+      expect(tfQ.subItems![1].correctAnswer).toBe(false);
     });
 
     it('shuffles multiple-choice options when option shuffling is enabled', () => {

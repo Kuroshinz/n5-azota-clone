@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Exam } from '../../../types/exam';
-import { listExams, saveExam, getSubmissions } from '../../../storage/examStorage';
+import { Exam, Submission } from '../../../types/exam';
+import { getStoredExams, getSubmissions, saveExam } from '../../../storage/examStorage';
 import { ShareExamModal } from '../../../components/ShareExamModal';
+import { Navbar } from '../../../components/Navbar';
 import {
   BookOpen,
   Plus,
@@ -13,193 +14,138 @@ import {
   Copy,
   ExternalLink,
   Users,
-  Check,
-  Calendar,
-  Share2,
   QrCode,
-  Loader2,
+  Calendar,
+  Check,
   ShieldCheck,
   Lock,
+  Globe,
   Shuffle,
+  Loader2,
+  Edit3,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
-
-const SEED_EXAMS: Exam[] = [
-  {
-    id: 'sample-exam-1',
-    title: 'Đề thi trắc nghiệm Toán học & Khoa học Tự nhiên',
-    durationMinutes: 15,
-    totalQuestions: 4,
-    createdAt: new Date().toISOString(),
-    settings: {
-      enableProctoring: false,
-      shuffleQuestions: false,
-      shuffleOptions: false,
-      maxViolations: 3,
-      showResultAfterSubmit: 'score_and_answers',
-    },
-    questions: [
-      {
-        id: 1,
-        rawText: 'Câu 1...',
-        content: 'Tìm tập nghiệm của phương trình bậc hai $x^2 - 5x + 6 = 0$.',
-        options: [
-          { key: 'A', content: '$S = \\{1; 6\\}$' },
-          { key: 'B', content: '$S = \\{2; 3\\}$' },
-          { key: 'C', content: '$S = \\{-2; -3\\}$' },
-          { key: 'D', content: '$S = \\{-1; -6\\}$' },
-        ],
-        correctAnswer: 'B',
-        score: 2.5,
-      },
-      {
-        id: 2,
-        rawText: 'Câu 2...',
-        content: 'Hằng số Planck $h$ trong vật lý lượng tử có giá trị xấp xỉ bằng bao nhiêu?',
-        options: [
-          { key: 'A', content: '$6.626 \\times 10^{-34}\\text{ J}\\cdot\\text{s}$' },
-          { key: 'B', content: '$3.00 \\times 10^8\\text{ m/s}$' },
-          { key: 'C', content: '$9.81\\text{ m/s}^2$' },
-          { key: 'D', content: '$1.602 \\times 10^{-19}\\text{ C}$' },
-        ],
-        correctAnswer: 'A',
-        score: 2.5,
-      },
-      {
-        id: 3,
-        rawText: 'Câu 3...',
-        content: 'Khí nào sau đây chiếm thể tích lớn nhất trong không khí khô của Trái Đất?',
-        options: [
-          { key: 'A', content: 'Khí Oxy ($O_2$)' },
-          { key: 'B', content: 'Khí Nitơ ($N_2$)' },
-          { key: 'C', content: 'Khí Carbonic ($CO_2$)' },
-          { key: 'D', content: 'Khí Argon ($Ar$)' },
-        ],
-        correctAnswer: 'B',
-        score: 2.5,
-      },
-      {
-        id: 4,
-        rawText: 'Câu 4...',
-        content: 'Cho hàm số $y = \\sqrt{x^2 + 1}$. Khẳng định nào sau đây là đúng về tập xác định $D$ của hàm số?',
-        options: [
-          { key: 'A', content: '$D = (0; +\\infty)$' },
-          { key: 'B', content: '$D = [-1; 1]$' },
-          { key: 'C', content: '$D = \\mathbb{R}$' },
-          { key: 'D', content: '$D = \\mathbb{R} \\setminus \\{0\\}$' },
-        ],
-        correctAnswer: 'C',
-        score: 2.5,
-      },
-    ],
-  },
-];
 
 export default function TeacherExamsPage() {
   const [exams, setExams] = useState<Exam[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedShareExam, setSelectedShareExam] = useState<Exam | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [examToDelete, setExamToDelete] = useState<Exam | null>(null);
+
+  // Sync with SQLite backend
+  const loadExams = async () => {
+    setIsLoading(true);
+
+    // Fetch server database (only returns current authenticated user's exams)
+    try {
+      const res = await fetch('/api/exams');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.exams)) {
+        setExams(data.exams);
+        data.exams.forEach((ex: Exam) => saveExam(ex));
+      } else {
+        setExams([]);
+      }
+    } catch (err) {
+      console.warn('Could not fetch exams from API, using cached data', err);
+      const localExams = getStoredExams();
+      setExams(localExams);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    // 1. Initial render from local cache for instant zero-flicker UI
-    const localExams = listExams();
-    if (localExams.length > 0) {
-      setExams(localExams);
-    }
-
-    // 2. Fetch server database state via API
-    setIsLoading(true);
-    fetch('/api/exams')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && Array.isArray(data.exams) && data.exams.length > 0) {
-          setExams(data.exams);
-          data.exams.forEach((e: Exam) => saveExam(e));
-        } else if (localExams.length === 0) {
-          SEED_EXAMS.forEach(e => {
-            saveExam(e);
-            fetch('/api/exams', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ exam: e }),
-            }).catch(() => {});
-          });
-          setExams(SEED_EXAMS);
-        }
-      })
-      .catch(err => {
-        console.warn('Could not fetch exams from API, using local cache', err);
-        if (localExams.length === 0) {
-          SEED_EXAMS.forEach(e => saveExam(e));
-          setExams(SEED_EXAMS);
-        }
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
+    loadExams();
   }, []);
 
   const handleCopyLink = (examId: string) => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const examUrl = `${origin}/exam/${examId}`;
-    navigator.clipboard.writeText(examUrl);
+    const url = `${window.location.origin}/exam/${examId}`;
+    navigator.clipboard.writeText(url);
     setCopiedId(examId);
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const handleDeleteExam = async () => {
+    if (!examToDelete) return;
+    const id = examToDelete.id;
+    setDeletingId(id);
+
+    try {
+      const res = await fetch(`/api/exams/${id}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (data.success) {
+        setExams(prev => prev.filter(e => e.id !== id));
+        setExamToDelete(null);
+      } else {
+        alert(data.error || 'Không thể xóa đề thi');
+      }
+    } catch (e) {
+      console.error('Delete exam error', e);
+      alert('Đã xảy ra lỗi khi xóa đề thi');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-slate-100 pb-16">
-      {/* Top Header */}
-      <header className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 px-6 py-4 backdrop-blur shadow-sm">
-        <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-md shadow-indigo-100">
-              <BookOpen className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-gray-900 leading-tight">
-                Không gian Giáo viên Azota
-              </h1>
-              <p className="text-xs text-gray-500">
-                Quản lý kho đề thi trực tuyến, sao chép liên kết làm bài và chấm điểm
-              </p>
-            </div>
-          </div>
+    <div className="min-h-screen bg-slate-100 pb-20">
+      <Navbar />
 
-          <Link
-            href="/teacher/create"
-            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-indigo-700 active:scale-95 transition"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Tạo đề thi mới</span>
-          </Link>
-        </div>
-      </header>
-
-      {/* Main Container */}
-      <main className="mx-auto max-w-7xl px-6 pt-6">
-        <div className="mb-6 flex items-center justify-between">
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 pt-6">
+        {/* Header */}
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-base font-bold text-gray-800">
-              Danh sách đề thi ({exams.length})
-            </h2>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Tất cả đề thi đã lưu trữ trên hệ thống cơ sở dữ liệu
+            <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">
+              Quản lý đề thi của tôi
+            </h1>
+            <p className="text-xs text-gray-500 mt-1">
+              Danh sách đề thi do bạn tạo. Bạn có thể chia sẻ link công khai cho học sinh làm bài hoặc quản lý bảng điểm.
             </p>
           </div>
-          {isLoading && (
-            <div className="flex items-center gap-2 text-xs text-indigo-600 font-medium">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              <span>Đang đồng bộ...</span>
-            </div>
-          )}
+
+          <div className="flex items-center gap-2">
+            <Link
+              href="/teacher/create"
+              className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Tạo đề thi mới</span>
+            </Link>
+          </div>
         </div>
+
+        {/* Empty State */}
+        {exams.length === 0 && !isLoading && (
+          <div className="my-12 rounded-3xl border border-dashed border-gray-300 bg-white p-12 text-center shadow-sm max-w-lg mx-auto">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+              <BookOpen className="h-8 w-8" />
+            </div>
+            <h3 className="text-base font-bold text-gray-900 mb-1">Chưa có đề thi nào</h3>
+            <p className="text-xs text-gray-500 mb-6">
+              Bạn chưa tạo đề thi nào. Hãy bắt đầu bằng cách tải lên file Word hoặc nhập đề thi trực tiếp!
+            </p>
+            <Link
+              href="/teacher/create"
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-indigo-700 transition"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Tạo đề thi ngay</span>
+            </Link>
+          </div>
+        )}
 
         {/* Exams Grid */}
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {exams.map(exam => {
             const submissionsCount = getSubmissions(exam.id).length;
             const createdDate = new Date(exam.createdAt).toLocaleDateString('vi-VN');
+            const isPublic = exam.isPublic !== false;
 
             return (
               <div
@@ -224,13 +170,25 @@ export default function TeacherExamsPage() {
 
                   {/* Settings Badges */}
                   <div className="mt-2.5 flex flex-wrap gap-1.5">
+                    {isPublic ? (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+                        <Globe className="h-3 w-3" />
+                        Công khai
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200">
+                        <Lock className="h-3 w-3" />
+                        Riêng tư
+                      </span>
+                    )}
+
                     {exam.settings?.enableProctoring ? (
                       <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 border border-indigo-200">
                         <ShieldCheck className="h-3 w-3" />
                         Giám sát
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+                      <span className="inline-flex items-center gap-1 rounded-md bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-700 border border-slate-200">
                         <BookOpen className="h-3 w-3" />
                         Ôn tập
                       </span>
@@ -268,11 +226,12 @@ export default function TeacherExamsPage() {
                 </div>
 
                 <div className="mt-6 border-t border-gray-100 pt-4 space-y-2">
+                  {/* Row 1: Copy Link & QR */}
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => handleCopyLink(exam.id)}
-                      className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-gray-50 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition"
+                      className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-gray-50 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition cursor-pointer"
                     >
                       {copiedId === exam.id ? (
                         <>
@@ -290,7 +249,7 @@ export default function TeacherExamsPage() {
                     <button
                       type="button"
                       onClick={() => setSelectedShareExam(exam)}
-                      className="flex items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/70 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition"
+                      className="flex items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/70 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition cursor-pointer"
                       title="Mã QR & Chia sẻ nâng cao"
                     >
                       <QrCode className="h-3.5 w-3.5" />
@@ -298,19 +257,41 @@ export default function TeacherExamsPage() {
                     </button>
                   </div>
 
+                  {/* Row 2: Edit & Delete Actions */}
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/teacher/edit/${exam.id}`}
+                      className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-white py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 transition"
+                    >
+                      <Edit3 className="h-3.5 w-3.5 text-indigo-600" />
+                      <span>Sửa đề</span>
+                    </Link>
+
+                    <button
+                      type="button"
+                      onClick={() => setExamToDelete(exam)}
+                      className="flex items-center justify-center gap-1 rounded-xl border border-rose-200 bg-rose-50/50 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-100 transition cursor-pointer"
+                      title="Xóa đề thi này"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>Xóa</span>
+                    </button>
+                  </div>
+
+                  {/* Row 3: Take Test & View Submissions */}
                   <div className="flex items-center gap-2 pt-1">
                     <Link
                       href={`/exam/${exam.id}`}
                       target="_blank"
-                      className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-indigo-50 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition"
+                      className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition"
                     >
-                      <ExternalLink className="h-3.5 w-3.5" />
+                      <ExternalLink className="h-3.5 w-3.5 text-gray-400" />
                       <span>Vào thi thử</span>
                     </Link>
 
                     <Link
                       href={`/teacher/submissions/${exam.id}`}
-                      className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition"
+                      className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 py-2 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 transition"
                     >
                       <Users className="h-3.5 w-3.5" />
                       <span>Xem bài nộp</span>
@@ -330,9 +311,48 @@ export default function TeacherExamsPage() {
           onClose={() => setSelectedShareExam(null)}
           examId={selectedShareExam.id}
           examTitle={selectedShareExam.title}
-          durationMinutes={selectedShareExam.durationMinutes}
-          totalQuestions={selectedShareExam.totalQuestions}
+          durationMinutes={selectedShareExam.durationMinutes || 45}
+          totalQuestions={selectedShareExam.totalQuestions || selectedShareExam.questions?.length || 0}
         />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {examToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl border border-gray-100">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+              <AlertTriangle className="h-6 w-6" />
+            </div>
+            <h3 className="text-base font-bold text-gray-900 mb-1">Xác nhận xóa đề thi</h3>
+            <p className="text-xs text-gray-500 mb-6 leading-relaxed">
+              Bạn có chắc chắn muốn xóa đề thi <strong className="text-gray-900">"{examToDelete.title}"</strong>? Toàn bộ kết quả bài nộp của học sinh sẽ bị mất và không thể hoàn tác.
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setExamToDelete(null)}
+                className="rounded-xl border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteExam}
+                disabled={deletingId === examToDelete.id}
+                className="flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-rose-700 transition disabled:opacity-50 cursor-pointer"
+              >
+                {deletingId === examToDelete.id ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Đang xóa...</span>
+                  </>
+                ) : (
+                  <span>Đồng ý xóa</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

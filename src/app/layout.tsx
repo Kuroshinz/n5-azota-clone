@@ -1,5 +1,6 @@
 import './globals.css';
 import type { Metadata } from 'next';
+import { Providers } from '@/components/Providers';
 
 export const metadata: Metadata = {
   title: 'Azota - Nền tảng tạo đề thi và bài tập online',
@@ -14,7 +15,7 @@ export default function RootLayout({
   return (
     <html lang="vi">
       <body className="min-h-screen bg-slate-50 antialiased selection:bg-indigo-500 selection:text-white">
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

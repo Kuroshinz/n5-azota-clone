@@ -2,12 +2,15 @@
 
 import React, { useState, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { parseExamText } from '../../../parser/examParser';
 import { extractTextAndImagesFromDocx } from '../../../parser/wordExtractor';
 import { saveExam } from '../../../storage/examStorage';
 import { QuestionCard } from '../../../components/QuestionCard';
 import { ShareExamModal } from '../../../components/ShareExamModal';
 import { ExamSettingsModal } from '../../../components/ExamSettingsModal';
+import { Navbar } from '../../../components/Navbar';
+import { useAuth } from '@/context/AuthContext';
 import { ExamSettings, DEFAULT_EXAM_SETTINGS } from '../../../types/exam';
 import {
   FilePlus,
@@ -26,6 +29,9 @@ import {
   Share2,
   Settings,
   ShieldCheck,
+  Edit3,
+  Globe,
+  Lock,
 } from 'lucide-react';
 
 const SAMPLE_TEMPLATE = `ĐỀ THI MINH HỌA CHUẨN GDPT 2018
@@ -72,12 +78,14 @@ Câu 5: Tính diện tích hình chữ nhật có chiều dài bằng 12.5 cm v�
 
 export default function CreateExamPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [inputMode, setInputMode] = useState<'upload' | 'text'>('upload');
   const [title, setTitle] = useState('Đề thi minh họa chuẩn GDPT 2018');
   const [durationMinutes, setDurationMinutes] = useState(45);
   const [rawText, setRawText] = useState(SAMPLE_TEMPLATE);
+  const [isPublic, setIsPublic] = useState(true);
 
   // Exam Settings state
   const [settings, setSettings] = useState<ExamSettings>(DEFAULT_EXAM_SETTINGS);
@@ -117,40 +125,43 @@ export default function CreateExamPage() {
       const result = await extractTextAndImagesFromDocx(buffer);
 
       setRawText(result.rawText);
+
+      const cleanTitle = file.name.replace(/\.docx$/i, '').trim();
+      if (cleanTitle) {
+        setTitle(cleanTitle);
+      }
+
       setExtractedInfo({
         fileName: file.name,
-        fileSize: (file.size / 1024).toFixed(1) + ' KB',
+        fileSize: `${(file.size / 1024).toFixed(1)} KB`,
         imageCount: result.imageCount,
       });
 
-      // Auto-update title if file name is suitable
-      const cleanName = file.name.replace(/\.docx$/i, '');
-      if (cleanName && title === 'Đề thi minh họa chuẩn GDPT 2018') {
-        setTitle(cleanName);
-      }
+      setInputMode('text');
     } catch (err: any) {
-      console.error('Lỗi trích xuất file docx:', err);
-      alert('Không thể trích xuất file Word. Vui lòng kiểm tra lại file của bạn!');
+      console.error('Error reading docx:', err);
+      alert('Không thể đọc file Word: ' + (err.message || 'Lỗi không xác định'));
     } finally {
       setIsExtracting(false);
     }
   };
 
-  const handleDrop = async (e: React.DragEvent) => {
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      await handleProcessDocxFile(e.dataTransfer.files[0]);
+      handleProcessDocxFile(e.dataTransfer.files[0]);
     }
   };
 
-  const handleSave = async () => {
+  const handleSaveExam = async () => {
     if (!title.trim()) {
-      alert('Vui lòng nhập tiêu đề đề thi!');
+      alert('Vui lòng nhập tên đề thi!');
       return;
     }
-    if (parsedExam.questions.length === 0) {
-      alert('Chưa nhận diện được câu hỏi nào. Vui lòng kiểm tra lại cấu trúc văn bản hoặc file Word!');
+
+    if (!parsedExam.questions || parsedExam.questions.length === 0) {
+      alert('Không tìm thấy câu hỏi hợp lệ trong đề thi. Vui lòng kiểm tra lại cấu trúc đề!');
       return;
     }
 
@@ -161,6 +172,8 @@ export default function CreateExamPage() {
       title,
       durationMinutes: Number(durationMinutes) || 45,
       settings,
+      authorId: user?.id || null,
+      isPublic,
       createdAt: new Date().toISOString(),
     };
 
@@ -183,69 +196,71 @@ export default function CreateExamPage() {
 
   return (
     <div className="min-h-screen bg-slate-100 pb-16">
-      {/* Top Header */}
-      <header className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 px-6 py-4 backdrop-blur shadow-sm">
+      {/* Universal Top Navigation */}
+      <Navbar />
+
+      {/* Main Sub-Header */}
+      <div className="border-b border-gray-200 bg-white/95 px-6 py-4 shadow-sm">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => router.push('/teacher/exams')}
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-100 transition"
+            <Link
+              href="/teacher/exams"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-100 transition"
+              title="Quay lại danh sách"
             >
               <ArrowLeft className="h-4 w-4" />
-            </button>
+            </Link>
             <div>
-              <h1 className="text-base font-bold text-gray-900 leading-tight">
-                Tạo đề thi mới & Nhận diện tự động
+              <h1 className="text-lg font-bold text-gray-900 leading-tight">
+                Tạo đề thi mới (Tự động bóc tách GDPT 2018)
               </h1>
               <p className="text-xs text-gray-500">
-                Hỗ trợ trích xuất từ file Word (.docx), công thức KaTeX và nhận diện 3 dạng câu hỏi GDPT 2018
+                Nhận diện tự động Trắc nghiệm A/B/C/D, Đúng/Sai 4 ý, Điền đáp số & Công thức Toán KaTeX
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            {/* Exam Settings Button */}
+          <div className="flex items-center gap-3">
+            {/* Exam Settings Modal Button */}
             <button
               type="button"
               onClick={() => setIsSettingsModalOpen(true)}
-              className="flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-3.5 py-2 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50 hover:border-gray-400 transition"
+              className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3.5 py-2 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50 hover:border-indigo-300 transition"
             >
               <Settings className="h-4 w-4 text-indigo-600" />
-              <span>Cấu hình đề</span>
-              {settings.enableProctoring ? (
-                <span className="flex items-center gap-1 rounded-md bg-indigo-100 px-1.5 py-0.5 text-[11px] font-bold text-indigo-700">
-                  <ShieldCheck className="h-3 w-3" />
-                  Giám sát
-                </span>
-              ) : (
-                <span className="flex items-center gap-1 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[11px] font-bold text-emerald-700">
-                  <BookOpen className="h-3 w-3" />
-                  Ôn tập
-                </span>
+              <span>Cấu hình đề thi</span>
+              {settings.enableProctoring && (
+                <span className="flex h-2 w-2 rounded-full bg-purple-600" />
               )}
             </button>
 
-            {/* Save & Publish Button */}
+            {/* Save Button */}
             <button
-              type="button"
-              disabled={isSaving}
-              onClick={handleSave}
-              className="flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2 text-xs font-semibold text-white shadow-md hover:bg-indigo-700 active:scale-95 transition disabled:opacity-50"
+              onClick={handleSaveExam}
+              disabled={isSaving || parsedExam.questions.length === 0}
+              className="flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2 text-xs font-bold text-white shadow-md shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition disabled:opacity-50 cursor-pointer"
             >
-              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              <span>{isSaving ? 'Đang lưu...' : 'Lưu & Xuất bản'}</span>
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Đang lưu...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" />
+                  <span>Hoàn tất & Xuất bản</span>
+                </>
+              )}
             </button>
           </div>
         </div>
-      </header>
+      </div>
 
-      {/* Main Container */}
       <main className="mx-auto max-w-7xl px-6 pt-6">
         {/* Exam Metadata bar */}
         <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div className="sm:col-span-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-12 items-center">
+            <div className="sm:col-span-6">
               <label className="block text-xs font-semibold text-gray-700 mb-1">
                 Tên đề thi:
               </label>
@@ -258,9 +273,9 @@ export default function CreateExamPage() {
               />
             </div>
 
-            <div>
+            <div className="sm:col-span-3">
               <label className="block text-xs font-semibold text-gray-700 mb-1">
-                Thời gian làm bài (phút):
+                Thời gian làm bài:
               </label>
               <div className="relative">
                 <input
@@ -269,10 +284,33 @@ export default function CreateExamPage() {
                   max="300"
                   value={durationMinutes}
                   onChange={e => setDurationMinutes(Number(e.target.value))}
-                  className="w-full rounded-xl border border-gray-300 px-3.5 py-2 text-sm font-medium focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full rounded-xl border border-gray-300 pl-3.5 pr-12 py-2 text-sm font-medium focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
                 <span className="absolute right-3 top-2.5 text-xs text-gray-400">phút</span>
               </div>
+            </div>
+
+            <div className="sm:col-span-3">
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Chế độ chia sẻ đề thi:
+              </label>
+              <button
+                type="button"
+                onClick={() => setIsPublic(!isPublic)}
+                className={`w-full flex items-center justify-between rounded-xl border px-3 py-2 text-xs font-semibold transition cursor-pointer ${
+                  isPublic
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                    : 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  {isPublic ? <Globe className="h-4 w-4 text-emerald-600" /> : <Lock className="h-4 w-4 text-amber-600" />}
+                  <span>{isPublic ? 'Công khai (Public)' : 'Riêng tư'}</span>
+                </div>
+                <span className="text-[10px] font-bold opacity-75">
+                  {isPublic ? 'Ai có link cũng thi được' : 'Chỉ mình tôi'}
+                </span>
+              </button>
             </div>
           </div>
         </div>
@@ -282,36 +320,45 @@ export default function CreateExamPage() {
           {/* Column 1: Source Input (Upload Word or Raw Text) */}
           <div className="flex flex-col rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
             {/* Tabs */}
-            <div className="flex border-b border-gray-200 bg-slate-50 px-4 pt-3">
-              <button
-                type="button"
-                onClick={() => setInputMode('upload')}
-                className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-bold transition ${
-                  inputMode === 'upload'
-                    ? 'border-indigo-600 text-indigo-600 bg-white rounded-t-lg'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <UploadCloud className="h-4 w-4" />
-                <span>Nhập từ file Word (.docx)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setInputMode('text')}
-                className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-bold transition ${
-                  inputMode === 'text'
-                    ? 'border-indigo-600 text-indigo-600 bg-white rounded-t-lg'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <FileCode className="h-4 w-4" />
-                <span>Nhập Text / Markdown trực tiếp</span>
-              </button>
+            <div className="flex items-center justify-between border-b border-gray-200 bg-slate-50/70 px-4 py-2.5">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setInputMode('upload')}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                    inputMode === 'upload'
+                      ? 'bg-white text-indigo-700 shadow-xs border border-gray-200'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <UploadCloud className="h-3.5 w-3.5" />
+                  <span>Tải file Word (.docx)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInputMode('text')}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                    inputMode === 'text'
+                      ? 'bg-white text-indigo-700 shadow-xs border border-gray-200'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <FileCode className="h-3.5 w-3.5" />
+                  <span>Chỉnh sửa văn bản thô</span>
+                </button>
+              </div>
+
+              {extractedInfo && (
+                <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  {extractedInfo.fileName} ({extractedInfo.imageCount} ảnh)
+                </span>
+              )}
             </div>
 
-            {/* Tab 1: Upload Word */}
-            {inputMode === 'upload' && (
-              <div className="p-5 flex-1 flex flex-col justify-between">
+            {/* Input Body */}
+            <div className="flex-1 p-4">
+              {inputMode === 'upload' ? (
                 <div
                   onDragOver={e => {
                     e.preventDefault();
@@ -319,142 +366,96 @@ export default function CreateExamPage() {
                   }}
                   onDragLeave={() => setIsDragging(false)}
                   onDrop={handleDrop}
-                  className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 text-center transition ${
+                  className={`flex h-96 flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 text-center transition ${
                     isDragging
-                      ? 'border-indigo-500 bg-indigo-50/50 scale-[0.99]'
-                      : 'border-gray-300 bg-slate-50 hover:border-indigo-400 hover:bg-slate-100/50'
+                      ? 'border-indigo-500 bg-indigo-50/50'
+                      : 'border-gray-300 bg-slate-50/50 hover:border-gray-400'
                   }`}
                 >
                   <input
                     ref={fileInputRef}
                     type="file"
                     accept=".docx"
-                    className="hidden"
                     onChange={e => {
-                      if (e.target.files && e.target.files[0]) {
+                      if (e.target.files && e.target.files.length > 0) {
                         handleProcessDocxFile(e.target.files[0]);
                       }
                     }}
+                    className="hidden"
                   />
-                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600">
-                    {isExtracting ? (
-                      <Loader2 className="h-7 w-7 animate-spin" />
-                    ) : (
-                      <UploadCloud className="h-7 w-7" />
-                    )}
-                  </div>
-                  <h3 className="text-sm font-bold text-gray-800">
-                    Kéo & thả file đề Word (.docx) vào đây
-                  </h3>
-                  <p className="mt-1 text-xs text-gray-500 max-w-sm">
-                    Tự động nhận diện công thức toán LaTeX, hình ảnh minh họa nhúng trong đề, bảng biểu và đáp án
-                  </p>
 
-                  <button
-                    type="button"
-                    disabled={isExtracting}
-                    onClick={() => fileInputRef.current?.click()}
-                    className="mt-5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition"
-                  >
-                    {isExtracting ? 'Đang trích xuất nội dung...' : 'Chọn file từ máy tính'}
-                  </button>
-                </div>
-
-                {extractedInfo && (
-                  <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="rounded-lg bg-emerald-100 p-2 text-emerald-700">
-                        <FileText className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-emerald-950">{extractedInfo.fileName}</p>
-                        <p className="text-[11px] text-emerald-700">
-                          Kích thước: {extractedInfo.fileSize} • Trích xuất thành công{' '}
-                          <span className="font-semibold">{extractedInfo.imageCount} hình ảnh</span>
-                        </p>
-                      </div>
+                  {isExtracting ? (
+                    <div className="flex flex-col items-center gap-3">
+                      <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
+                      <p className="text-xs font-semibold text-gray-700">
+                        Đang đọc văn bản, bóc tách cấu trúc câu hỏi & hình ảnh từ file Word...
+                      </p>
                     </div>
-                    <span className="flex items-center gap-1 text-xs font-semibold text-emerald-800">
-                      <CheckCircle2 className="h-4 w-4" /> Đã nhập
-                    </span>
-                  </div>
-                )}
-
-                <div className="mt-5 border-t border-gray-100 pt-3">
-                  <div className="flex items-center justify-between text-xs text-gray-500">
-                    <span>Đã nhận diện: {parsedExam.questions.length} câu hỏi</span>
-                    <button
-                      type="button"
-                      onClick={() => setInputMode('text')}
-                      className="text-indigo-600 hover:underline font-medium"
-                    >
-                      Xem hoặc sửa nội dung trích xuất →
-                    </button>
-                  </div>
+                  ) : (
+                    <>
+                      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 shadow-xs">
+                        <UploadCloud className="h-7 w-7" />
+                      </div>
+                      <h3 className="text-sm font-bold text-gray-800">
+                        Kéo thả file Word (.docx) đề thi vào đây
+                      </h3>
+                      <p className="mt-1 text-xs text-gray-500 max-w-xs">
+                        Hệ thống tự động nhận diện chữ, bảng biểu, công thức Toán học KaTeX và trích xuất ảnh minh họa.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="mt-5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition cursor-pointer"
+                      >
+                        Chọn file từ máy tính
+                      </button>
+                    </>
+                  )}
                 </div>
-              </div>
-            )}
-
-            {/* Tab 2: Text Editor */}
-            {inputMode === 'text' && (
-              <div className="p-5 flex-1 flex flex-col">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-gray-700">
-                    Nội dung văn bản thô (Hỗ trợ cú pháp Azota & LaTeX $...$):
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setRawText(SAMPLE_TEMPLATE)}
-                    className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
-                  >
-                    Nạp đề mẫu GDPT 2018
-                  </button>
+              ) : (
+                <div className="flex h-full flex-col">
+                  <textarea
+                    value={rawText}
+                    onChange={e => setRawText(e.target.value)}
+                    placeholder="Dán nội dung đề thi vào đây..."
+                    className="h-96 w-full resize-none font-mono text-xs leading-relaxed text-gray-800 focus:outline-none"
+                  />
                 </div>
-                <textarea
-                  value={rawText}
-                  onChange={e => setRawText(e.target.value)}
-                  rows={20}
-                  className="flex-1 w-full font-mono text-xs text-gray-800 rounded-xl border border-gray-300 p-3.5 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 leading-relaxed"
-                />
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
-          {/* Column 2: Live Question Preview */}
+          {/* Column 2: Live Parsed Preview */}
           <div className="flex flex-col rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between border-b border-gray-200 bg-slate-50 px-5 py-3">
+            <div className="flex items-center justify-between border-b border-gray-200 bg-slate-50/70 px-4 py-3">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-indigo-600" />
-                <h2 className="text-xs font-bold uppercase tracking-wider text-gray-700">
-                  Xem trước đề thi ({parsedExam.questions.length} câu đã nhận diện)
+                <h2 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
+                  Xem trước trực quan ({parsedExam.questions.length} câu)
                 </h2>
               </div>
-              <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-bold text-indigo-700">
-                Tổng điểm: {parsedExam.questions.reduce((sum, q) => sum + (q.score || 0), 0).toFixed(2)}
+              <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-bold text-indigo-700">
+                Thang 10 điểm
               </span>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5 space-y-4 max-h-[720px]">
+            <div className="flex-1 max-h-[720px] overflow-y-auto p-4 space-y-4">
               {parsedExam.questions.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-12 text-center text-gray-400">
-                  <AlertCircle className="h-8 w-8 text-gray-300 mb-2" />
-                  <p className="text-sm font-medium">Chưa có câu hỏi nào được nhận diện</p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    Tải lên file Word hoặc dán nội dung văn bản theo định dạng &quot;Câu 1:&quot;, &quot;A.&quot;, &quot;B.&quot;
+                <div className="flex h-96 flex-col items-center justify-center text-center text-gray-400">
+                  <BookOpen className="mb-2 h-10 w-10 opacity-30" />
+                  <p className="text-xs font-semibold">Chưa có câu hỏi nào được bóc tách</p>
+                  <p className="text-[11px] mt-1 max-w-xs">
+                    Vui lòng tải file Word hoặc nhập nội dung theo mẫu chuẩn câu hỏi (Câu 1, Câu 2...)
                   </p>
                 </div>
               ) : (
-                parsedExam.questions.map(q => (
+                parsedExam.questions.map((q, idx) => (
                   <QuestionCard
-                    key={q.id}
+                    key={q.id || idx}
+                    displayNumber={idx + 1}
                     question={q}
                     showAnswer={true}
                     readOnly={true}
-                    selectedOption={
-                      (q.type === 'true_false' && q.subItems
-                        ? (Object.fromEntries(q.subItems.map(s => [s.key, s.correctAnswer ?? true])) as any)
-                        : q.correctAnswer || (q.acceptedAnswers ? q.acceptedAnswers[0] : undefined)) as any
-                    }
                   />
                 ))
               )}
@@ -463,22 +464,27 @@ export default function CreateExamPage() {
         </div>
       </main>
 
-      {/* Exam Settings Modal */}
+      {/* Share Modal */}
+      {createdExamId && (
+        <ShareExamModal
+          isOpen={isShareModalOpen}
+          onClose={() => {
+            setIsShareModalOpen(false);
+            router.push('/teacher/exams');
+          }}
+          examId={createdExamId}
+          examTitle={title}
+          durationMinutes={Number(durationMinutes) || 45}
+          totalQuestions={parsedExam.questions.length}
+        />
+      )}
+
+      {/* Settings Modal */}
       <ExamSettingsModal
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}
         settings={settings}
-        onSaveSettings={setSettings}
-      />
-
-      {/* Share Exam Modal with QR Code and Direct Copy */}
-      <ShareExamModal
-        isOpen={isShareModalOpen}
-        onClose={() => setIsShareModalOpen(false)}
-        examId={createdExamId || ''}
-        examTitle={title}
-        durationMinutes={Number(durationMinutes) || 45}
-        totalQuestions={parsedExam.questions.length}
+        onSaveSettings={(updated: ExamSettings) => setSettings(updated)}
       />
     </div>
   );

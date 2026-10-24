@@ -7,6 +7,21 @@ generator client {
   provider = "prisma-client-js"
 }
 
+model User {
+  id           String       @id @default(cuid())
+  fullName     String
+  phone        String       @unique
+  email        String?      @unique
+  passwordHash String
+  role         String       @default("USER")
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  exams        Exam[]
+  submissions  Submission[]
+
+  @@map("users")
+}
+
 model Exam {
   id              String       @id
   title           String
@@ -14,17 +29,23 @@ model Exam {
   totalQuestions  Int          @default(0)
   questionsJson   String
   settingsJson    String       @default("{}")
+  authorId        String?
+  isPublic        Boolean      @default(true)
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
   submissions     Submission[]
+  author          User?        @relation(fields: [authorId], references: [id], onDelete: SetNull)
 
+  @@index([authorId])
   @@map("exams")
 }
 
 model Submission {
   id                   String   @id
   examId               String
+  userId               String?
   studentName          String   @default("Học sinh")
+  studentPhone         String?
   score                Float    @default(0)
   totalScore           Float    @default(10)
   answersJson          String
@@ -32,7 +53,9 @@ model Submission {
   submittedAt          DateTime @default(now())
 
   exam                 Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  user                 User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([examId])
+  @@index([userId])
   @@map("submissions")
 }

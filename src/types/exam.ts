@@ -68,16 +68,35 @@ export interface Exam {
   totalQuestions: number;
   questions: Question[];
   settings?: ExamSettings;
+  authorId?: string | null;
+  isPublic?: boolean;
+  author?: {
+    id: string;
+    fullName: string;
+    phone?: string;
+  } | null;
   createdAt: string;
 }
 
 export interface Submission {
   id: string;
   examId: string;
+  userId?: string | null;
   studentName: string;
+  studentPhone?: string | null;
   answers: Record<number, StudentAnswerValue>;
   score: number;
   totalScore: number;
   submittedAt: string;
   proctoringReport: ProctoringReport;
+  timeSpentSeconds?: number;
+  proctoringViolations?: number;
+  deviceInfo?: string;
+  isAutoSubmitted?: boolean;
+  user?: {
+    id: string;
+    fullName: string;
+    phone: string;
+    email?: string | null;
+  } | null;
 }

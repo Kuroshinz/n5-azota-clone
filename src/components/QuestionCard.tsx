@@ -7,6 +7,7 @@ import { Flag, CheckCircle, XCircle, Check, X } from 'lucide-react';
 
 interface QuestionCardProps {
   question: Question;
+  displayNumber?: number;
   selectedOption?: StudentAnswerValue;
   isFlagged?: boolean;
   onSelectOption?: (val: any) => void;
@@ -17,6 +18,7 @@ interface QuestionCardProps {
 
 export const QuestionCard: React.FC<QuestionCardProps> = ({
   question,
+  displayNumber,
   selectedOption,
   isFlagged,
   onSelectOption,
@@ -25,6 +27,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
   readOnly = false,
 }) => {
   const qType = question.type || 'multiple_choice';
+  const displayNum = displayNumber ?? question.id;
 
   const typeBadgeLabel =
     qType === 'true_false'
@@ -36,13 +39,14 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
   return (
     <div
       id={`question-${question.id}`}
+      data-display-num={displayNum}
       className="scroll-mt-20 rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:shadow-md"
     >
       {/* Header */}
       <div className="mb-3 flex items-start justify-between">
         <div className="flex items-center gap-2">
           <span className="rounded-lg bg-indigo-50 px-2.5 py-1 text-sm font-bold text-indigo-700">
-            Câu {question.id}
+            Câu {displayNum}
           </span>
           <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
             {typeBadgeLabel}
@@ -50,11 +54,12 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
           <span className="text-xs text-gray-500">({question.score} điểm)</span>
         </div>
 
-        {onToggleFlag && !readOnly && (
+        {/* Action: Flag */}
+        {!readOnly && onToggleFlag && (
           <button
             type="button"
             onClick={onToggleFlag}
-            className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition ${
+            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
               isFlagged ? 'bg-amber-100 text-amber-700' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
             }`}
           >

@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
+import { useAuth } from '../../../context/AuthContext';
+import Link from 'next/link';
 import { Exam, Question, StudentAnswerValue, Submission, DEFAULT_EXAM_SETTINGS } from '../../../types/exam';
 import {
   getExam,
@@ -18,6 +20,7 @@ import { QuestionCard } from '../../../components/QuestionCard';
 import { QuestionNavGrid } from '../../../components/QuestionNavGrid';
 import { ProctoringModal } from '../../../components/ProctoringModal';
 import {
+  LogIn,
   Clock,
   Shield,
   CheckCircle,
@@ -33,6 +36,8 @@ import {
   Shuffle,
   EyeOff,
   Calendar,
+  Home,
+  Check,
 } from 'lucide-react';
 
 const DEFAULT_SAMPLE_EXAM: Exam = {
@@ -110,6 +115,13 @@ export default function ExamTakingPage() {
   const [studentName, setStudentName] = useState('Học sinh');
   const [passwordInput, setPasswordInput] = useState('');
   const [accessError, setAccessError] = useState<string | null>(null);
+  const { user, loading: authLoading } = useAuth();
+
+  useEffect(() => {
+    if (user?.fullName) {
+      setStudentName(user.fullName);
+    }
+  }, [user]);
 
   const [hasStarted, setHasStarted] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -236,7 +248,7 @@ export default function ExamTakingPage() {
 
     setAccessError(null);
 
-    // Apply shuffling
+    // Apply shuffling (questions are shuffled in position, but displayed sequentially 1..n)
     const shuffled = shuffleExamQuestions(
       exam.questions,
       exam.settings?.shuffleQuestions ?? false,
@@ -270,7 +282,9 @@ export default function ExamTakingPage() {
     let finalSubmission: Submission = {
       id: `sub-${Date.now()}`,
       examId: exam.id,
-      studentName: studentName || 'Học sinh',
+      userId: user?.id || null,
+      studentName: user?.fullName || studentName || 'Học sinh',
+      studentPhone: user?.phone || null,
       answers,
       score: scoreResult.score,
       totalScore: scoreResult.totalScore,
@@ -284,7 +298,9 @@ export default function ExamTakingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           examId: exam.id,
-          studentName: studentName || 'Học sinh',
+          userId: user?.id || null,
+          studentName: user?.fullName || studentName || 'Học sinh',
+          studentPhone: user?.phone || null,
           answers,
           proctoringReport: finalReport,
         }),
@@ -386,22 +402,68 @@ export default function ExamTakingPage() {
             </div>
           )}
 
-          {/* Student name */}
-          <div className="mb-4 text-left">
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-              Họ và tên thí sinh:
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={studentName}
-                onChange={e => setStudentName(e.target.value)}
-                placeholder="Nhập họ và tên của bạn..."
-                className="w-full rounded-xl border border-gray-300 py-2.5 pl-10 pr-4 text-sm font-medium focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              />
-              <User className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-gray-400" />
+          {/* Authentication & Candidate Identity */}
+          {!authLoading && !user ? (
+            <div className="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-5 mb-6 text-left">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-200">
+                  <User className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-indigo-950">Yêu cầu đăng nhập tài khoản</h4>
+                  <p className="text-xs text-indigo-700 mt-1 leading-relaxed">
+                    Vui lòng đăng nhập để làm bài thi. Điểm số và bài làm của bạn sẽ được lưu chính xác vào danh sách cho người tạo đề xem.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-col sm:flex-row gap-2.5">
+                <Link
+                  href={`/login?redirect=/exam/${exam.id}`}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-indigo-100 hover:bg-indigo-700 transition"
+                >
+                  <LogIn className="h-4 w-4" />
+                  <span>Đăng nhập để làm bài</span>
+                </Link>
+                <Link
+                  href={`/register?redirect=/exam/${exam.id}`}
+                  className="flex items-center justify-center gap-1.5 rounded-xl border border-indigo-300 bg-white px-4 py-2.5 text-xs font-bold text-indigo-700 hover:bg-indigo-50 transition"
+                >
+                  <span>Tạo tài khoản mới</span>
+                </Link>
+              </div>
             </div>
-          </div>
+          ) : user ? (
+            <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5 flex items-center justify-between text-left">
+              <div className="flex items-center gap-2.5">
+                <div className="h-8 w-8 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shadow-sm">
+                  {user.fullName.charAt(0)}
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-emerald-950">{user.fullName}</div>
+                  <div className="text-[11px] text-emerald-700">SĐT: {user.phone}</div>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">
+                Đã xác thực
+              </span>
+            </div>
+          ) : (
+            <div className="mb-4 text-left">
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                Họ và tên thí sinh:
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={studentName}
+                  onChange={e => setStudentName(e.target.value)}
+                  placeholder="Nhập họ và tên của bạn..."
+                  className="w-full rounded-xl border border-gray-300 py-2.5 pl-10 pr-4 text-sm font-medium focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+                <User className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-gray-400" />
+              </div>
+            </div>
+          )}
 
           {/* Password Gate if required */}
           {hasPassword && (
@@ -429,14 +491,30 @@ export default function ExamTakingPage() {
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={handleStartExam}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition"
-          >
-            <span>{isProctoringEnabled ? 'Bật Fullscreen & Bắt đầu thi' : 'Bắt đầu làm bài thi'}</span>
-            <ArrowRight className="h-4 w-4" />
-          </button>
+          <div className="space-y-2">
+            {(!user && !authLoading) ? (
+              <div className="text-center py-2 text-xs text-gray-500">
+                Hãy đăng nhập để mở khóa nút làm bài thi
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleStartExam}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition"
+              >
+                <span>{isProctoringEnabled ? 'Bật Fullscreen & Bắt đầu thi' : 'Bắt đầu làm bài thi'}</span>
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            )}
+
+            <Link
+              href="/"
+              className="flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-gray-500 hover:text-gray-800 transition"
+            >
+              <Home className="h-3.5 w-3.5" />
+              <span>Quay về Trang chủ</span>
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -458,10 +536,19 @@ export default function ExamTakingPage() {
         <header className="border-b border-gray-200 bg-white px-6 py-4 shadow-sm">
           <div className="mx-auto flex max-w-5xl items-center justify-between">
             <div>
-              <h1 className="text-lg font-bold text-gray-900 leading-tight">
-                Kết quả bài thi: {exam.title}
-              </h1>
-              <p className="text-xs text-gray-500">
+              <div className="flex items-center gap-3">
+                <Link
+                  href="/"
+                  className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition bg-indigo-50 px-2 py-1 rounded-lg"
+                >
+                  <Home className="h-3.5 w-3.5" />
+                  <span>Trang chủ</span>
+                </Link>
+                <h1 className="text-base sm:text-lg font-bold text-gray-900 leading-tight">
+                  Kết quả bài thi: {exam.title}
+                </h1>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
                 Thí sinh: <strong>{submission.studentName}</strong> | Nộp lúc:{' '}
                 {new Date(submission.submittedAt).toLocaleTimeString('vi-VN')}
               </p>
@@ -526,13 +613,21 @@ export default function ExamTakingPage() {
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => window.location.reload()}
-                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition"
-              >
-                Làm lại bài thi
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition"
+                >
+                  Làm lại bài thi
+                </button>
+                <Link
+                  href="/"
+                  className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 transition"
+                >
+                  Về Trang chủ
+                </Link>
+              </div>
             </div>
           )}
 
@@ -548,10 +643,11 @@ export default function ExamTakingPage() {
           {/* Full Solutions Review (Only if policy === score_and_answers) */}
           {policy === 'score_and_answers' && (
             <div className="space-y-4">
-              {displayQuestions.map(q => (
+              {displayQuestions.map((q, index) => (
                 <QuestionCard
                   key={q.id}
                   question={q}
+                  displayNumber={index + 1}
                   selectedOption={answers[q.id]}
                   showAnswer={true}
                   readOnly={true}
@@ -571,6 +667,17 @@ export default function ExamTakingPage() {
       <header className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 px-6 py-3 backdrop-blur shadow-sm">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <div className="flex items-center gap-3">
+            {!isProctoringEnabled && (
+              <Link
+                href="/"
+                className="flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition"
+                title="Quay về Trang chủ"
+              >
+                <Home className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Trang chủ</span>
+              </Link>
+            )}
+
             <div>
               <h1 className="text-sm font-bold text-gray-900 line-clamp-1">{exam.title}</h1>
               <p className="text-xs text-gray-500">
@@ -620,12 +727,13 @@ export default function ExamTakingPage() {
       {/* Main Examination Layout: 2 Columns */}
       <main className="mx-auto max-w-7xl px-6 pt-6">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-          {/* Question List (3 Cols) */}
+          {/* Question List (3 Cols) - ALWAYS numbered sequentially 1..n */}
           <div className="space-y-4 lg:col-span-3">
-            {displayQuestions.map(q => (
+            {displayQuestions.map((q, index) => (
               <QuestionCard
                 key={q.id}
                 question={q}
+                displayNumber={index + 1}
                 selectedOption={answers[q.id]}
                 isFlagged={flaggedIds.has(q.id)}
                 onSelectOption={val => handleSelectOption(q.id, val)}
@@ -638,10 +746,10 @@ export default function ExamTakingPage() {
           {/* Navigation & Info Sidebar (1 Col) */}
           <div className="space-y-4 lg:col-span-1">
             <QuestionNavGrid
-              totalQuestions={displayQuestions.length}
+              questions={displayQuestions}
               answers={answers}
               flaggedQuestionIds={flaggedIds}
-              onSelectQuestion={questionId => {
+              onSelectQuestion={(questionId) => {
                 const el = document.getElementById(`question-${questionId}`);
                 el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
               }}
@@ -649,34 +757,34 @@ export default function ExamTakingPage() {
 
             {/* Anti-cheat or Practice card */}
             {isProctoringEnabled ? (
-              <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm text-xs">
-                <div className="flex items-center gap-2 font-bold text-gray-800 mb-2">
-                  <Shield className="h-4 w-4 text-emerald-600" />
-                  <span>Giám sát thi trực tuyến</span>
+              <div className="rounded-xl border border-indigo-100 bg-white p-4 text-xs text-gray-600 shadow-sm">
+                <div className="flex items-center gap-2 font-bold text-indigo-900 mb-2">
+                  <Shield className="h-4 w-4 text-indigo-600" />
+                  <span>Quy chế giám sát</span>
                 </div>
-                <p className="text-gray-500 mb-2">
-                  Số lần chuyển màn hình: <strong className="text-indigo-600">{report.outScreenCount}</strong>
-                  {maxViolations > 0 && <span> / {maxViolations}</span>}
-                </p>
-                {!isFullscreen && (
-                  <button
-                    type="button"
-                    onClick={() => requestFullscreen()}
-                    className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 py-1.5 font-semibold text-amber-800 hover:bg-amber-100 transition"
-                  >
-                    <Maximize2 className="h-3.5 w-3.5" />
-                    <span>Bật lại toàn màn hình</span>
-                  </button>
-                )}
+                <div className="space-y-1.5 text-gray-500">
+                  <div className="flex justify-between">
+                    <span>Rời màn hình:</span>
+                    <strong className={report.outScreenCount > 0 ? 'text-amber-600' : 'text-gray-700'}>
+                      {report.outScreenCount} / {maxViolations > 0 ? maxViolations : '∞'} lần
+                    </strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Thoát toàn màn hình:</span>
+                    <strong className={report.fullscreenExitCount > 0 ? 'text-amber-600' : 'text-gray-700'}>
+                      {report.fullscreenExitCount} lần
+                    </strong>
+                  </div>
+                </div>
               </div>
             ) : (
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 shadow-sm text-xs text-emerald-900">
-                <div className="flex items-center gap-2 font-bold mb-1">
+              <div className="rounded-xl border border-emerald-100 bg-white p-4 text-xs text-gray-600 shadow-sm">
+                <div className="flex items-center gap-2 font-bold text-emerald-800 mb-1">
                   <BookOpen className="h-4 w-4 text-emerald-600" />
-                  <span>Chế độ Ôn tập</span>
+                  <span>Chế độ ôn tập</span>
                 </div>
-                <p className="text-emerald-700 text-[11px] leading-relaxed">
-                  Bạn có thể mở tài liệu tham khảo hoặc chuyển cửa sổ mà không bị tính vi phạm gian lận.
+                <p className="text-[11px] text-gray-500 leading-relaxed">
+                  Đề thi tự do không tính vi phạm. Bạn có thể tự ôn luyện và kiểm tra lại câu trả lời trước khi nộp.
                 </p>
               </div>
             )}
@@ -684,53 +792,50 @@ export default function ExamTakingPage() {
         </div>
       </main>
 
-      {/* Proctoring Violation Warning Modal */}
-      {isProctoringEnabled && (
-        <ProctoringModal
-          isOpen={showWarningModal}
-          violationCount={report.outScreenCount + report.fullscreenExitCount}
-          maxViolations={maxViolations}
-          isAutoSubmitting={isAutoSubmitting}
-          latestViolation={latestViolation}
-          onDismiss={() => setShowWarningModal(false)}
-        />
-      )}
+      {/* Warning Modal for Proctoring Violations */}
+      <ProctoringModal
+        isOpen={showWarningModal}
+        violationCount={report.outScreenCount + report.fullscreenExitCount}
+        maxViolations={maxViolations}
+        isAutoSubmitting={isAutoSubmitting}
+        latestViolation={latestViolation}
+        onDismiss={async () => {
+          setShowWarningModal(false);
+          await requestFullscreen();
+        }}
+      />
 
-      {/* Confirm Submit Dialog Modal */}
+      {/* Confirmation Modal before Submit */}
       {showConfirmSubmit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl text-center">
-            <AlertCircle className="mx-auto mb-3 h-10 w-10 text-amber-500" />
-            <h3 className="text-base font-bold text-gray-900 mb-1">Xác nhận nộp bài?</h3>
-            <p className="text-xs text-gray-500 mb-5">
-              Bạn đã làm được{' '}
-              <strong className="text-indigo-600">{Object.keys(answers).length}</strong> /{' '}
-              {exam.totalQuestions} câu. Bạn có chắc chắn muốn kết thúc bài thi?
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+              <AlertCircle className="h-6 w-6" />
+            </div>
+
+            <h3 className="text-lg font-bold text-gray-900 mb-1">Xác nhận nộp bài thi?</h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Bạn đã hoàn thành{' '}
+              <strong>
+                {Object.keys(answers).length} / {displayQuestions.length}
+              </strong>{' '}
+              câu hỏi. Bạn có chắc chắn muốn nộp bài thi ngay bây giờ?
             </p>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
-                disabled={isSubmitting}
                 onClick={() => setShowConfirmSubmit(false)}
-                className="flex-1 rounded-xl border border-gray-200 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition"
+                className="rounded-xl border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition"
               >
-                Làm tiếp
+                Tiếp tục làm bài
               </button>
               <button
                 type="button"
-                disabled={isSubmitting}
                 onClick={() => handleSubmitExam()}
-                className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-indigo-700 transition disabled:opacity-50"
+                className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-md hover:bg-indigo-700 transition"
               >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    <span>Đang nộp...</span>
-                  </>
-                ) : (
-                  <span>Đồng ý nộp</span>
-                )}
+                Xác nhận nộp bài
               </button>
             </div>
           </div>

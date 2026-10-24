@@ -6,7 +6,9 @@ import { prisma } from './prisma';
 
 export interface SubmitExamParams {
   examId: string;
-  studentName: string;
+  userId?: string | null;
+  studentName?: string;
+  studentPhone?: string | null;
   answers: Record<number, StudentAnswerValue>;
   proctoringReport: ProctoringReport;
 }
@@ -23,6 +25,9 @@ export class ExamService {
     const parsed = parseExamText(rawText, metadata);
     if (metadata?.settings) {
       parsed.settings = metadata.settings;
+    }
+    if (metadata?.authorId) {
+      parsed.authorId = metadata.authorId;
     }
     await this.saveExam(parsed);
     return parsed;
@@ -41,6 +46,8 @@ export class ExamService {
         totalQuestions: exam.totalQuestions || exam.questions?.length || 0,
         questionsJson,
         settingsJson,
+        authorId: exam.authorId ?? null,
+        isPublic: exam.isPublic !== undefined ? exam.isPublic : true,
         createdAt: exam.createdAt ? new Date(exam.createdAt) : new Date(),
       },
       update: {
@@ -49,6 +56,8 @@ export class ExamService {
         totalQuestions: exam.totalQuestions || exam.questions?.length || 0,
         questionsJson,
         settingsJson,
+        authorId: exam.authorId !== undefined ? exam.authorId : undefined,
+        isPublic: exam.isPublic !== undefined ? exam.isPublic : undefined,
       },
     });
     return exam;
@@ -57,6 +66,11 @@ export class ExamService {
   public async getExam(id: string): Promise<Exam | null> {
     const record = await prisma.exam.findUnique({
       where: { id },
+      include: {
+        author: {
+          select: { id: true, fullName: true, phone: true }
+        }
+      }
     });
     if (!record) return null;
 
@@ -82,13 +96,22 @@ export class ExamService {
       durationMinutes: record.durationMinutes,
       totalQuestions: record.totalQuestions,
       createdAt: record.createdAt.toISOString(),
+      authorId: record.authorId,
+      isPublic: record.isPublic,
+      author: record.author ? { id: record.author.id, fullName: record.author.fullName, phone: record.author.phone } : null,
       questions,
       settings,
     };
   }
 
-  public async listExams(): Promise<Exam[]> {
+  public async listExams(authorId?: string): Promise<Exam[]> {
     const records = await prisma.exam.findMany({
+      where: authorId ? { authorId } : undefined,
+      include: {
+        author: {
+          select: { id: true, fullName: true, phone: true }
+        }
+      },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -115,10 +138,28 @@ export class ExamService {
         durationMinutes: record.durationMinutes,
         totalQuestions: record.totalQuestions,
         createdAt: record.createdAt.toISOString(),
+        authorId: record.authorId,
+        isPublic: record.isPublic,
+        author: record.author ? { id: record.author.id, fullName: record.author.fullName, phone: record.author.phone } : null,
         questions,
         settings,
       };
     });
+  }
+
+  public async deleteExam(id: string): Promise<boolean> {
+    try {
+      await prisma.submission.deleteMany({
+        where: { examId: id },
+      });
+      await prisma.exam.delete({
+        where: { id },
+      });
+      return true;
+    } catch (e) {
+      console.error('Failed to delete exam', id, e);
+      return false;
+    }
   }
 
   public async submitExam(params: SubmitExamParams): Promise<Submission> {
@@ -137,29 +178,44 @@ export class ExamService {
       data: {
         id: submissionId,
         examId: params.examId,
+        userId: params.userId || null,
         studentName: params.studentName || 'Học sinh',
+        studentPhone: params.studentPhone || null,
         score,
         totalScore,
         answersJson,
         proctoringReportJson,
+      },
+      include: {
+        user: {
+          select: { id: true, fullName: true, phone: true, email: true },
+        },
       },
     });
 
     return {
       id: record.id,
       examId: record.examId,
+      userId: record.userId,
       studentName: record.studentName,
+      studentPhone: record.studentPhone,
       answers: params.answers,
       score: record.score,
       totalScore: record.totalScore,
       submittedAt: record.submittedAt.toISOString(),
       proctoringReport: params.proctoringReport,
+      user: record.user,
     };
   }
 
   public async getSubmission(id: string): Promise<Submission | null> {
     const record = await prisma.submission.findUnique({
       where: { id },
+      include: {
+        user: {
+          select: { id: true, fullName: true, phone: true, email: true },
+        },
+      },
     });
     if (!record) return null;
 
@@ -181,18 +237,26 @@ export class ExamService {
     return {
       id: record.id,
       examId: record.examId,
+      userId: record.userId,
       studentName: record.studentName,
+      studentPhone: record.studentPhone,
       answers,
       score: record.score,
       totalScore: record.totalScore,
       submittedAt: record.submittedAt.toISOString(),
       proctoringReport,
+      user: record.user,
     };
   }
 
   public async getSubmissions(examId?: string): Promise<Submission[]> {
     const records = await prisma.submission.findMany({
       where: examId ? { examId } : undefined,
+      include: {
+        user: {
+          select: { id: true, fullName: true, phone: true, email: true },
+        },
+      },
       orderBy: { submittedAt: 'desc' },
     });
 
@@ -215,12 +279,15 @@ export class ExamService {
       return {
         id: record.id,
         examId: record.examId,
+        userId: record.userId,
         studentName: record.studentName,
+        studentPhone: record.studentPhone,
         answers,
         score: record.score,
         totalScore: record.totalScore,
         submittedAt: record.submittedAt.toISOString(),
         proctoringReport,
+        user: record.user,
       };
     });
   }
