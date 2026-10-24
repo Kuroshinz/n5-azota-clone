@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { parseExamText } from '../../../parser/examParser';
 import { extractTextAndImagesFromDocx } from '../../../parser/wordExtractor';
-import { cleanPdfExamText, normalizePdfInlineChoices } from '../../../parser/pdfExtractor';
+import { cleanPdfExamText, normalizePdfInlineChoices, extractTextFromPdf } from '../../../parser/pdfExtractor';
 import { saveExam } from '../../../storage/examStorage';
 import { QuestionCard } from '../../../components/QuestionCard';
 import { ShareExamModal } from '../../../components/ShareExamModal';
@@ -155,30 +155,68 @@ export default function CreateExamPage() {
         setTitle(baseTitle);
       }
 
-      // CASE 1: PDF Document
+      // CASE 1: PDF Document (Direct client-side extraction + Server API fallback)
       if (ext === 'pdf') {
-        setExtractProgressMessage('Đang tải và trích xuất nội dung từ file PDF...');
-        const formData = new FormData();
-        formData.append('file', file);
+        setExtractProgressMessage('Đang phân tích cấu trúc PDF và trích xuất câu hỏi...');
+        let extractedSuccessfully = false;
 
-        const res = await fetch('/api/parser/pdf', {
-          method: 'POST',
-          body: formData,
-        });
+        // Try direct in-browser extraction first (No 4.5MB payload limit, zero network delay)
+        try {
+          const buffer = await file.arrayBuffer();
+          const result = await extractTextFromPdf(buffer);
 
-        const data = await res.json();
-        if (!data.success) {
-          throw new Error(data.error || 'Không thể trích xuất file PDF');
+          if (result.rawText && result.rawText.trim().length > 0) {
+            setRawText(result.rawText);
+            setExtractedInfo({
+              fileName: file.name,
+              fileSize: `${(file.size / 1024).toFixed(1)} KB`,
+              fileType: 'pdf',
+              pageCount: result.pageCount,
+              detectedQuestions: result.questionCount,
+            });
+            extractedSuccessfully = true;
+          }
+        } catch (clientErr: any) {
+          console.warn('In-browser PDF parsing encountered an error, trying server route...', clientErr);
         }
 
-        setRawText(data.text);
-        setExtractedInfo({
-          fileName: file.name,
-          fileSize: data.fileSize || `${(file.size / 1024).toFixed(1)} KB`,
-          fileType: 'pdf',
-          pageCount: data.pageCount,
-          detectedQuestions: data.questionCount,
-        });
+        // If client-side couldn't extract or failed, attempt server route if file size is permitted
+        if (!extractedSuccessfully) {
+          if (file.size > 4.2 * 1024 * 1024) {
+            throw new Error(`File PDF có dung lượng lớn (${(file.size / (1024 * 1024)).toFixed(1)} MB). Vui lòng thử nén dung lượng file hoặc chuyển sang định dạng Word (.docx).`);
+          }
+
+          setExtractProgressMessage('Đang kết nối máy chủ phân tích tài liệu...');
+          const formData = new FormData();
+          formData.append('file', file);
+
+          const res = await fetch('/api/parser/pdf', {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (!res.ok) {
+            const rawResponse = await res.text();
+            if (res.status === 413 || rawResponse.includes('Request Entity')) {
+              throw new Error('Dung lượng file PDF vượt quá giới hạn tải lên của máy chủ (tối đa 4.5MB). Vui lòng nén nhỏ file hoặc dùng file Word.');
+            }
+            throw new Error(`Máy chủ thông báo lỗi (${res.status}): ${rawResponse.slice(0, 120)}`);
+          }
+
+          const data = await res.json();
+          if (!data.success) {
+            throw new Error(data.error || 'Không thể trích xuất file PDF');
+          }
+
+          setRawText(data.text);
+          setExtractedInfo({
+            fileName: file.name,
+            fileSize: data.fileSize || `${(file.size / 1024).toFixed(1)} KB`,
+            fileType: 'pdf',
+            pageCount: data.pageCount,
+            detectedQuestions: data.questionCount,
+          });
+        }
       }
       // CASE 2: Word DOCX Document
       else if (ext === 'docx') {
