@@ -1,0 +1,37 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Exam {
+  id              String       @id
+  title           String
+  durationMinutes Int          @default(45)
+  totalQuestions  Int          @default(0)
+  questionsJson   String
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  submissions     Submission[]
+
+  @@map("exams")
+}
+
+model Submission {
+  id                   String   @id
+  examId               String
+  studentName          String   @default("Học sinh")
+  score                Float    @default(0)
+  totalScore           Float    @default(10)
+  answersJson          String
+  proctoringReportJson String
+  submittedAt          DateTime @default(now())
+
+  exam                 Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@index([examId])
+  @@map("submissions")
+}

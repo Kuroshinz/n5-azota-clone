@@ -5,4 +5,5 @@ coverage/
 .DS_Store
 *.log
 *.tsbuildinfo
-
+prisma/*.db*
+prisma/dev.db
