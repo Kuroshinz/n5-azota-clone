@@ -78,6 +78,7 @@ export default function CreateExamPage() {
   // File extraction state
   const [isExtracting, setIsExtracting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [extractedInfo, setExtractedInfo] = useState<{
     fileName: string;
     fileSize: string;
@@ -135,7 +136,7 @@ export default function CreateExamPage() {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!title.trim()) {
       alert('Vui lòng nhập tiêu đề đề thi!');
       return;
@@ -154,9 +155,21 @@ export default function CreateExamPage() {
       createdAt: new Date().toISOString(),
     };
 
-    saveExam(examToSave);
-    setCreatedExamId(newId);
-    setIsShareModalOpen(true);
+    setIsSaving(true);
+    try {
+      await fetch('/api/exams', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exam: examToSave }),
+      });
+    } catch (e) {
+      console.warn('API save error, persisting to local cache', e);
+    } finally {
+      saveExam(examToSave);
+      setCreatedExamId(newId);
+      setIsShareModalOpen(true);
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -185,11 +198,12 @@ export default function CreateExamPage() {
           <div className="flex items-center gap-3">
             <button
               type="button"
+              disabled={isSaving}
               onClick={handleSave}
-              className="flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-indigo-700 active:scale-95 transition"
+              className="flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-indigo-700 active:scale-95 transition disabled:opacity-50"
             >
-              <Save className="h-4 w-4" />
-              <span>Lưu & Xuất bản</span>
+              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              <span>{isSaving ? 'Đang lưu...' : 'Lưu & Xuất bản'}</span>
             </button>
           </div>
         </div>
@@ -218,23 +232,23 @@ export default function CreateExamPage() {
                 Thời gian làm bài (phút):
               </label>
               <div className="relative">
-                <Clock className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                 <input
                   type="number"
-                  min={1}
-                  max={300}
+                  min="1"
+                  max="300"
                   value={durationMinutes}
                   onChange={e => setDurationMinutes(Number(e.target.value))}
-                  className="w-full rounded-xl border border-gray-300 py-2 pl-9 pr-3 text-sm font-medium focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full rounded-xl border border-gray-300 px-3.5 py-2 text-sm font-medium focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
+                <Clock className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-gray-400" />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Ingestion Mode Tabs */}
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2 rounded-xl bg-slate-200/80 p-1">
+        {/* Input Mode Selector Tabs */}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+          <div className="inline-flex rounded-xl bg-slate-200 p-1 shadow-inner">
             <button
               type="button"
               onClick={() => setInputMode('upload')}
@@ -278,8 +292,8 @@ export default function CreateExamPage() {
             onClick={() => fileInputRef.current?.click()}
             className={`mb-6 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 text-center cursor-pointer transition ${
               isDragging
-                ? 'border-indigo-600 bg-indigo-50/70'
-                : 'border-indigo-200 bg-white hover:border-indigo-400 hover:bg-slate-50/50'
+                ? 'border-indigo-500 bg-indigo-50/80 scale-[1.01]'
+                : 'border-indigo-200 bg-white hover:border-indigo-400 hover:bg-indigo-50/30'
             }`}
           >
             <input
@@ -288,97 +302,95 @@ export default function CreateExamPage() {
               accept=".docx"
               className="hidden"
               onChange={e => {
-                if (e.target.files && e.target.files[0]) {
+                if (e.target.files && e.target.files.length > 0) {
                   handleProcessDocxFile(e.target.files[0]);
                 }
               }}
             />
 
-            {isExtracting ? (
-              <div className="flex flex-col items-center gap-3">
-                <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
-                <div className="text-sm font-bold text-gray-900">Đang đọc và trích xuất file Word...</div>
-                <p className="text-xs text-gray-500">Bóc tách công thức toán, hình vẽ nhúng và cấu trúc đề thi</p>
-              </div>
-            ) : extractedInfo ? (
-              <div className="flex flex-col items-center gap-2">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600 mb-1">
-                  <CheckCircle2 className="h-6 w-6" />
-                </div>
-                <div className="text-sm font-bold text-emerald-900">
-                  {extractedInfo.fileName} ({extractedInfo.fileSize})
-                </div>
-                <div className="flex items-center gap-2 text-xs text-emerald-700">
-                  <ImageIcon className="h-3.5 w-3.5" />
-                  <span>Trích xuất thành công <strong>{extractedInfo.imageCount}</strong> hình vẽ nhúng</span>
-                </div>
-                <p className="text-[11px] text-gray-500 mt-1">
-                  Nhấp hoặc kéo thả file khác để thay thế
-                </p>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-2">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 mb-1">
-                  <UploadCloud className="h-6 w-6" />
-                </div>
-                <div className="text-sm font-bold text-gray-900">
-                  Kéo thả file Word (.docx) vào đây, hoặc <span className="text-indigo-600 underline">chọn từ máy tính</span>
-                </div>
-                <p className="text-xs text-gray-500">
-                  Hệ thống tự động nhận diện câu hỏi, đáp án A/B/C/D, Đúng/Sai, Trả lời ngắn và hình vẽ
-                </p>
+            <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 shadow-sm">
+              {isExtracting ? (
+                <Loader2 className="h-7 w-7 animate-spin" />
+              ) : (
+                <UploadCloud className="h-7 w-7" />
+              )}
+            </div>
+
+            <h3 className="text-sm font-bold text-slate-800 mb-1">
+              {isExtracting ? 'Đang trích xuất nội dung & hình ảnh...' : 'Kéo thả file Word (.docx) vào đây'}
+            </h3>
+            <p className="text-xs text-slate-500 max-w-md">
+              Hệ thống tự động trích xuất các câu hỏi, bảng đáp án, công thức và nhúng các hình vẽ đồ thị base64 tức thì.
+            </p>
+
+            {extractedInfo && (
+              <div className="mt-4 inline-flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-800 shadow-sm">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                <span>Đã nhập: <strong>{extractedInfo.fileName}</strong> ({extractedInfo.fileSize})</span>
+                {extractedInfo.imageCount > 0 && (
+                  <span className="flex items-center gap-1 text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full text-[11px]">
+                    <ImageIcon className="h-3 w-3" />
+                    {extractedInfo.imageCount} ảnh nhúng
+                  </span>
+                )}
               </div>
             )}
           </div>
         )}
 
-        {/* Live Split-View Workspace */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          {/* Left Column: Text / Script Editor */}
-          <div className="lg:col-span-5 flex flex-col rounded-2xl border border-gray-200 bg-white p-4 shadow-sm h-[720px]">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
-                <FileCode className="h-3.5 w-3.5 text-indigo-600" />
-                <span>Nội dung văn bản đề thi (Có thể chỉnh sửa)</span>
+        {/* 2-Column Split: Raw Text Input on Left, Live Parsed Preview on Right */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* Column 1: Raw Text Input */}
+          <div className="flex flex-col rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gray-700">
+                <FileCode className="h-4 w-4 text-indigo-600" />
+                Nội dung đề thi nguồn (Văn bản / Markdown)
               </span>
               <button
                 type="button"
                 onClick={() => setRawText(SAMPLE_TEMPLATE)}
                 className="text-[11px] font-semibold text-indigo-600 hover:underline"
               >
-                Nạp lại đề mẫu
+                Tải lại mẫu chuẩn
               </button>
             </div>
 
             <textarea
               value={rawText}
               onChange={e => setRawText(e.target.value)}
-              placeholder="Dán nội dung đề thi vào đây..."
-              className="flex-1 w-full rounded-xl border border-gray-200 bg-slate-50 p-3 font-mono text-xs leading-relaxed text-gray-800 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none overflow-y-auto"
+              placeholder="Nhập hoặc dán nội dung đề thi..."
+              className="h-[620px] w-full resize-none rounded-xl border border-gray-200 bg-slate-50 p-4 font-mono text-xs leading-relaxed text-gray-800 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              spellCheck={false}
             />
+
+            <div className="mt-3 flex items-center justify-between text-[11px] text-gray-400">
+              <span>Hỗ trợ thẻ công thức $ ... $ và hình ảnh ![Hình vẽ](data:image/...)</span>
+              <span>{rawText.length} ký tự</span>
+            </div>
           </div>
 
-          {/* Right Column: Live Real-time Rendered Questions */}
-          <div className="lg:col-span-7 flex flex-col rounded-2xl border border-gray-200 bg-white p-4 shadow-sm h-[720px]">
-            <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-2.5">
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-indigo-600" />
-                <span className="text-xs font-bold text-gray-800">
-                  Xem trước trực quan ({parsedExam.questions.length} câu hỏi)
-                </span>
-              </div>
-              <span className="text-[11px] text-gray-500">
-                Tự động render KaTeX & Hình ảnh
+          {/* Column 2: Live Parsed Question Preview */}
+          <div className="flex flex-col rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-gray-700">
+                <Sparkles className="h-4 w-4 text-emerald-600" />
+                Xem trước câu hỏi nhận diện ({parsedExam.questions.length})
+              </span>
+              <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
+                Xem trước thời gian thực
               </span>
             </div>
 
-            <div className="flex-1 space-y-4 overflow-y-auto pr-2">
+            <div className="h-[620px] overflow-y-auto space-y-4 pr-1">
               {parsedExam.questions.length === 0 ? (
-                <div className="flex h-full flex-col items-center justify-center text-center p-8 text-gray-400">
-                  <BookOpen className="h-10 w-10 mb-2 stroke-1" />
-                  <p className="text-sm font-semibold">Chưa có câu hỏi nào được nhận diện</p>
-                  <p className="text-xs mt-1">
-                    Hãy dán đề thi hoặc tải file Word ở cột bên trái theo định dạng: "Câu 1: ... A. ... B. ... C. ... D. ... Đáp án: A"
+                <div className="flex h-full flex-col items-center justify-center text-center text-gray-400">
+                  <AlertCircle className="mb-2 h-8 w-8 text-amber-500" />
+                  <p className="text-xs font-medium text-gray-600">
+                    Chưa nhận diện được câu hỏi nào.
+                  </p>
+                  <p className="text-[11px] text-gray-400 max-w-xs mt-1">
+                    Hãy đảm bảo các câu hỏi bắt đầu bằng <strong>Câu 1:</strong> hoặc <strong>Câu 1.</strong> và các đáp án bắt đầu bằng <strong>A.</strong>, <strong>B.</strong>...
                   </p>
                 </div>
               ) : (
@@ -388,6 +400,11 @@ export default function CreateExamPage() {
                     question={q}
                     showAnswer={true}
                     readOnly={true}
+                    selectedOption={
+                      (q.type === 'true_false' && q.subItems
+                        ? (Object.fromEntries(q.subItems.map(s => [s.key, s.correctAnswer ?? true])) as any)
+                        : q.correctAnswer || (q.acceptedAnswers ? q.acceptedAnswers[0] : undefined)) as any
+                    }
                   />
                 ))
               )}
@@ -396,17 +413,15 @@ export default function CreateExamPage() {
         </div>
       </main>
 
-      {/* Post-publish Share Exam Modal */}
-      {createdExamId && (
-        <ShareExamModal
-          isOpen={isShareModalOpen}
-          onClose={() => setIsShareModalOpen(false)}
-          examId={createdExamId}
-          examTitle={title}
-          durationMinutes={durationMinutes}
-          totalQuestions={parsedExam.questions.length}
-        />
-      )}
+      {/* Share Exam Modal with QR Code and Direct Copy */}
+      <ShareExamModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        examId={createdExamId || ''}
+        examTitle={title}
+        durationMinutes={Number(durationMinutes) || 45}
+        totalQuestions={parsedExam.questions.length}
+      />
     </div>
   );
 }

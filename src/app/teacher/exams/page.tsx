@@ -17,6 +17,7 @@ import {
   Calendar,
   Share2,
   QrCode,
+  Loader2,
 } from 'lucide-react';
 
 const SEED_EXAMS: Exam[] = [
@@ -87,14 +88,45 @@ export default function TeacherExamsPage() {
   const [exams, setExams] = useState<Exam[]>(SEED_EXAMS);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedShareExam, setSelectedShareExam] = useState<Exam | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    let currentExams = listExams();
-    if (currentExams.length === 0) {
-      SEED_EXAMS.forEach(e => saveExam(e));
-      currentExams = listExams();
+    // 1. Initial render from local cache for instant zero-flicker UI
+    const localExams = listExams();
+    if (localExams.length > 0) {
+      setExams(localExams);
     }
-    setExams(currentExams);
+
+    // 2. Fetch server database state via API
+    setIsLoading(true);
+    fetch('/api/exams')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.exams) && data.exams.length > 0) {
+          setExams(data.exams);
+          data.exams.forEach((e: Exam) => saveExam(e));
+        } else if (localExams.length === 0) {
+          SEED_EXAMS.forEach(e => {
+            saveExam(e);
+            fetch('/api/exams', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ exam: e }),
+            }).catch(() => {});
+          });
+          setExams(SEED_EXAMS);
+        }
+      })
+      .catch(err => {
+        console.warn('Could not fetch exams from API, using local cache', err);
+        if (localExams.length === 0) {
+          SEED_EXAMS.forEach(e => saveExam(e));
+          setExams(SEED_EXAMS);
+        }
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   }, []);
 
   const handleCopyLink = (examId: string) => {
@@ -133,90 +165,112 @@ export default function TeacherExamsPage() {
       {/* Main Content */}
       <main className="mx-auto max-w-6xl px-6 py-8">
         <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <BookOpen className="h-5 w-5 text-indigo-600" />
-            <h2 className="text-base font-bold text-gray-900">Danh sách đề thi đã tạo ({exams.length})</h2>
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Danh sách đề thi</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Tất cả đề thi đã lưu trữ trên hệ thống cơ sở dữ liệu
+            </p>
           </div>
+          {isLoading && (
+            <div className="flex items-center gap-2 text-xs text-indigo-600 font-medium">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span>Đang đồng bộ...</span>
+            </div>
+          )}
         </div>
 
         {/* Exams Grid */}
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {exams.map(exam => {
-            const submissions = getSubmissions(exam.id);
+            const submissionsCount = getSubmissions(exam.id).length;
+            const createdDate = new Date(exam.createdAt).toLocaleDateString('vi-VN');
 
             return (
               <div
                 key={exam.id}
-                className="flex flex-col justify-between rounded-2xl border border-gray-200 bg-white p-5 shadow-sm hover:shadow-md transition"
+                className="group flex flex-col justify-between rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition hover:shadow-md hover:border-indigo-200"
               >
                 <div>
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <h3 className="font-bold text-gray-900 text-sm line-clamp-2 leading-snug">
-                      {exam.title}
-                    </h3>
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700">
+                      <BookOpen className="h-3 w-3" />
+                      ID: {exam.id}
+                    </span>
+                    <span className="flex items-center gap-1 text-[11px] text-gray-400">
+                      <Calendar className="h-3 w-3" />
+                      {createdDate}
+                    </span>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 mb-4">
-                    <span className="flex items-center gap-1">
-                      <Clock className="h-3.5 w-3.5 text-gray-400" />
-                      {exam.durationMinutes} phút
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <HelpCircle className="h-3.5 w-3.5 text-gray-400" />
-                      {exam.totalQuestions} câu hỏi
-                    </span>
-                    <span className="flex items-center gap-1 text-indigo-600 font-semibold">
-                      <Users className="h-3.5 w-3.5" />
-                      {submissions.length} bài nộp
-                    </span>
+                  <h3 className="text-base font-bold text-gray-900 group-hover:text-indigo-600 transition line-clamp-2">
+                    {exam.title}
+                  </h3>
+
+                  <div className="mt-4 flex flex-wrap gap-4 text-xs text-gray-500">
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="h-4 w-4 text-gray-400" />
+                      <span>{exam.durationMinutes} phút</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <HelpCircle className="h-4 w-4 text-gray-400" />
+                      <span>{exam.totalQuestions} câu hỏi</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Users className="h-4 w-4 text-gray-400" />
+                      <span>{submissionsCount} bài nộp</span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="border-t border-gray-100 pt-3 space-y-2">
+                <div className="mt-6 border-t border-gray-100 pt-4 space-y-2">
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setSelectedShareExam(exam)}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/70 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition"
-                      title="Mở hộp thoại chia sẻ & mã QR"
+                      onClick={() => handleCopyLink(exam.id)}
+                      className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-gray-50 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition"
                     >
-                      <Share2 className="h-3.5 w-3.5" />
-                      <span>Chia sẻ & QR</span>
+                      {copiedId === exam.id ? (
+                        <>
+                          <Check className="h-3.5 w-3.5 text-emerald-600" />
+                          <span className="text-emerald-600">Đã chép link</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3.5 w-3.5 text-gray-500" />
+                          <span>Copy Link</span>
+                        </>
+                      )}
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => handleCopyLink(exam.id)}
-                      className={`flex items-center justify-center rounded-xl border p-2 text-xs font-semibold transition ${
-                        copiedId === exam.id
-                          ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
-                          : 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100'
-                      }`}
-                      title="Copy nhanh link thi"
+                      onClick={() => setSelectedShareExam(exam)}
+                      className="flex items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition"
+                      title="Chia sẻ mã QR & link"
                     >
-                      {copiedId === exam.id ? (
-                        <Check className="h-4 w-4 text-emerald-600" />
-                      ) : (
-                        <Copy className="h-4 w-4 text-gray-500" />
-                      )}
+                      <Share2 className="h-3.5 w-3.5 text-indigo-600" />
+                      <span>Chia sẻ</span>
                     </button>
+                  </div>
 
+                  <div className="flex items-center gap-2">
                     <Link
                       href={`/exam/${exam.id}`}
                       target="_blank"
-                      className="flex items-center justify-center rounded-xl border border-gray-200 bg-gray-50 p-2 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition"
-                      title="Vào phòng thi thử"
+                      className="flex-1 flex items-center justify-center gap-1 rounded-xl bg-slate-100 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition"
                     >
-                      <ExternalLink className="h-4 w-4" />
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      <span>Thi thử</span>
+                    </Link>
+
+                    <Link
+                      href={`/teacher/submissions/${exam.id}`}
+                      className="flex-1 flex items-center justify-center gap-1 rounded-xl bg-indigo-600 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition"
+                    >
+                      <Users className="h-3.5 w-3.5" />
+                      <span>Xem bài nộp</span>
                     </Link>
                   </div>
-
-                  <Link
-                    href={`/teacher/submissions/${exam.id}`}
-                    className="block w-full rounded-xl bg-slate-900 py-2 text-center text-xs font-semibold text-white hover:bg-slate-800 transition"
-                  >
-                    Xem kết quả bài nộp ({submissions.length})
-                  </Link>
                 </div>
               </div>
             );
@@ -227,7 +281,7 @@ export default function TeacherExamsPage() {
       {/* Share Modal */}
       {selectedShareExam && (
         <ShareExamModal
-          isOpen={true}
+          isOpen={!!selectedShareExam}
           onClose={() => setSelectedShareExam(null)}
           examId={selectedShareExam.id}
           examTitle={selectedShareExam.title}
