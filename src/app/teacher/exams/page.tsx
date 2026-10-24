@@ -18,6 +18,9 @@ import {
   Share2,
   QrCode,
   Loader2,
+  ShieldCheck,
+  Lock,
+  Shuffle,
 } from 'lucide-react';
 
 const SEED_EXAMS: Exam[] = [
@@ -27,6 +30,13 @@ const SEED_EXAMS: Exam[] = [
     durationMinutes: 15,
     totalQuestions: 4,
     createdAt: new Date().toISOString(),
+    settings: {
+      enableProctoring: false,
+      shuffleQuestions: false,
+      shuffleOptions: false,
+      maxViolations: 3,
+      showResultAfterSubmit: 'score_and_answers',
+    },
     questions: [
       {
         id: 1,
@@ -44,25 +54,25 @@ const SEED_EXAMS: Exam[] = [
       {
         id: 2,
         rawText: 'Câu 2...',
-        content: 'Tính tích phân sau: $$\\int_0^1 (2x + 1) dx$$',
+        content: 'Hằng số Planck $h$ trong vật lý lượng tử có giá trị xấp xỉ bằng bao nhiêu?',
         options: [
-          { key: 'A', content: '$1$' },
-          { key: 'B', content: '$2$' },
-          { key: 'C', content: '$3$' },
-          { key: 'D', content: '$0$' },
+          { key: 'A', content: '$6.626 \\times 10^{-34}\\text{ J}\\cdot\\text{s}$' },
+          { key: 'B', content: '$3.00 \\times 10^8\\text{ m/s}$' },
+          { key: 'C', content: '$9.81\\text{ m/s}^2$' },
+          { key: 'D', content: '$1.602 \\times 10^{-19}\\text{ C}$' },
         ],
-        correctAnswer: 'B',
+        correctAnswer: 'A',
         score: 2.5,
       },
       {
         id: 3,
         rawText: 'Câu 3...',
-        content: 'Kim loại nào sau đây có tính dẫn điện tốt nhất ở điều kiện thường?',
+        content: 'Khí nào sau đây chiếm thể tích lớn nhất trong không khí khô của Trái Đất?',
         options: [
-          { key: 'A', content: 'Đồng (Cu)' },
-          { key: 'B', content: 'Bạc (Ag)' },
-          { key: 'C', content: 'Vàng (Au)' },
-          { key: 'D', content: 'Nhôm (Al)' },
+          { key: 'A', content: 'Khí Oxy ($O_2$)' },
+          { key: 'B', content: 'Khí Nitơ ($N_2$)' },
+          { key: 'C', content: 'Khí Carbonic ($CO_2$)' },
+          { key: 'D', content: 'Khí Argon ($Ar$)' },
         ],
         correctAnswer: 'B',
         score: 2.5,
@@ -70,14 +80,14 @@ const SEED_EXAMS: Exam[] = [
       {
         id: 4,
         rawText: 'Câu 4...',
-        content: 'Vận tốc ánh sáng trong chân không xấp xỉ bằng bao nhiêu?',
+        content: 'Cho hàm số $y = \\sqrt{x^2 + 1}$. Khẳng định nào sau đây là đúng về tập xác định $D$ của hàm số?',
         options: [
-          { key: 'A', content: '$3 \\times 10^8\\text{ m/s}$' },
-          { key: 'B', content: '$3 \\times 10^5\\text{ m/s}$' },
-          { key: 'C', content: '$340\\text{ m/s}$' },
-          { key: 'D', content: '$1.5 \\times 10^8\\text{ m/s}$' },
+          { key: 'A', content: '$D = (0; +\\infty)$' },
+          { key: 'B', content: '$D = [-1; 1]$' },
+          { key: 'C', content: '$D = \\mathbb{R}$' },
+          { key: 'D', content: '$D = \\mathbb{R} \\setminus \\{0\\}$' },
         ],
-        correctAnswer: 'A',
+        correctAnswer: 'C',
         score: 2.5,
       },
     ],
@@ -85,7 +95,7 @@ const SEED_EXAMS: Exam[] = [
 ];
 
 export default function TeacherExamsPage() {
-  const [exams, setExams] = useState<Exam[]>(SEED_EXAMS);
+  const [exams, setExams] = useState<Exam[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedShareExam, setSelectedShareExam] = useState<Exam | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -138,23 +148,27 @@ export default function TeacherExamsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="min-h-screen bg-slate-100 pb-16">
       {/* Top Header */}
-      <header className="border-b border-gray-200 bg-white px-6 py-4 shadow-sm">
-        <div className="mx-auto flex max-w-6xl items-center justify-between">
+      <header className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 px-6 py-4 backdrop-blur shadow-sm">
+        <div className="mx-auto flex max-w-7xl items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-600 font-bold text-white shadow-md">
-              A
-            </span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-md shadow-indigo-100">
+              <BookOpen className="h-5 w-5" />
+            </div>
             <div>
-              <h1 className="text-lg font-bold text-gray-900 leading-tight">Azota - Quản lý đề thi của Giáo viên</h1>
-              <p className="text-xs text-gray-500">Giám sát thi trực tuyến, nhận diện toán học và chấm tự động</p>
+              <h1 className="text-lg font-bold text-gray-900 leading-tight">
+                Không gian Giáo viên Azota
+              </h1>
+              <p className="text-xs text-gray-500">
+                Quản lý kho đề thi trực tuyến, sao chép liên kết làm bài và chấm điểm
+              </p>
             </div>
           </div>
 
           <Link
             href="/teacher/create"
-            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-indigo-700 transition"
+            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-indigo-700 active:scale-95 transition"
           >
             <Plus className="h-4 w-4" />
             <span>Tạo đề thi mới</span>
@@ -162,11 +176,13 @@ export default function TeacherExamsPage() {
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="mx-auto max-w-6xl px-6 py-8">
+      {/* Main Container */}
+      <main className="mx-auto max-w-7xl px-6 pt-6">
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Danh sách đề thi</h2>
+            <h2 className="text-base font-bold text-gray-800">
+              Danh sách đề thi ({exams.length})
+            </h2>
             <p className="text-xs text-gray-500 mt-0.5">
               Tất cả đề thi đã lưu trữ trên hệ thống cơ sở dữ liệu
             </p>
@@ -205,6 +221,35 @@ export default function TeacherExamsPage() {
                   <h3 className="text-base font-bold text-gray-900 group-hover:text-indigo-600 transition line-clamp-2">
                     {exam.title}
                   </h3>
+
+                  {/* Settings Badges */}
+                  <div className="mt-2.5 flex flex-wrap gap-1.5">
+                    {exam.settings?.enableProctoring ? (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 border border-indigo-200">
+                        <ShieldCheck className="h-3 w-3" />
+                        Giám sát
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+                        <BookOpen className="h-3 w-3" />
+                        Ôn tập
+                      </span>
+                    )}
+
+                    {exam.settings?.password && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 border border-amber-200">
+                        <Lock className="h-3 w-3" />
+                        Mật khẩu
+                      </span>
+                    )}
+
+                    {(exam.settings?.shuffleQuestions || exam.settings?.shuffleOptions) && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-purple-50 px-2 py-0.5 text-[10px] font-semibold text-purple-700 border border-purple-200">
+                        <Shuffle className="h-3 w-3" />
+                        Đảo đề
+                      </span>
+                    )}
+                  </div>
 
                   <div className="mt-4 flex flex-wrap gap-4 text-xs text-gray-500">
                     <div className="flex items-center gap-1.5">
@@ -245,27 +290,27 @@ export default function TeacherExamsPage() {
                     <button
                       type="button"
                       onClick={() => setSelectedShareExam(exam)}
-                      className="flex items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition"
-                      title="Chia sẻ mã QR & link"
+                      className="flex items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/70 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition"
+                      title="Mã QR & Chia sẻ nâng cao"
                     >
-                      <Share2 className="h-3.5 w-3.5 text-indigo-600" />
-                      <span>Chia sẻ</span>
+                      <QrCode className="h-3.5 w-3.5" />
+                      <span>QR</span>
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 pt-1">
                     <Link
                       href={`/exam/${exam.id}`}
                       target="_blank"
-                      className="flex-1 flex items-center justify-center gap-1 rounded-xl bg-slate-100 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition"
+                      className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-indigo-50 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition"
                     >
                       <ExternalLink className="h-3.5 w-3.5" />
-                      <span>Thi thử</span>
+                      <span>Vào thi thử</span>
                     </Link>
 
                     <Link
                       href={`/teacher/submissions/${exam.id}`}
-                      className="flex-1 flex items-center justify-center gap-1 rounded-xl bg-indigo-600 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition"
+                      className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition"
                     >
                       <Users className="h-3.5 w-3.5" />
                       <span>Xem bài nộp</span>
@@ -278,7 +323,7 @@ export default function TeacherExamsPage() {
         </div>
       </main>
 
-      {/* Share Modal */}
+      {/* Share Exam Modal */}
       {selectedShareExam && (
         <ShareExamModal
           isOpen={!!selectedShareExam}
