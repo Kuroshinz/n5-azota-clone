@@ -9,10 +9,21 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/login') ||
     pathname.startsWith('/register') ||
     pathname.startsWith('/api/auth') ||
+    pathname.startsWith('/exam/') || // allow public exam room access via QR code / link
     pathname.startsWith('/_next') ||
     pathname.startsWith('/static') ||
     pathname === '/favicon.ico' ||
     pathname.match(/\.(png|jpg|jpeg|gif|svg|ico|css|js|webp|woff|woff2|ttf)$/)
+  ) {
+    return NextResponse.next();
+  }
+
+  // 1b. Allow public APIs for exam room & student submissions:
+  // - GET /api/exams/:id (getting exam details to take test)
+  // - POST /api/submissions (submitting exam answers)
+  if (
+    (pathname.match(/^\/api\/exams\/[^/]+$/) && request.method === 'GET') ||
+    (pathname === '/api/submissions' && request.method === 'POST')
   ) {
     return NextResponse.next();
   }

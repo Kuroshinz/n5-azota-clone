@@ -81,6 +81,6 @@ describe('AuthService', () => {
     await expect(auth.loginUser(testPhone, 'WrongPassword')).rejects.toThrow('Mật khẩu không chính xác');
 
     // Login with non-existent phone
-    await expect(auth.loginUser('0999999999', 'AnyPassword')).rejects.toThrow('Tài khoản không tồn tại');
+    await expect(auth.loginUser('0900000000', 'AnyPassword')).rejects.toThrow('Tài khoản không tồn tại');
   });
 });

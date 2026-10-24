@@ -20,22 +20,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, submissions: mySubs });
     }
 
-    // 2. Querying submissions by exam: ONLY the author of the exam has permission
+    // 2. Querying submissions by exam
     if (examId) {
       const exam = await examService.getExam(examId);
       if (!exam) {
         return NextResponse.json({ success: false, error: 'Không tìm thấy đề thi' }, { status: 404 });
       }
 
-      if (exam.authorId && exam.authorId !== currentUser.userId) {
-        return NextResponse.json(
-          { success: false, error: 'Chỉ tác giả đề thi mới có quyền xem danh sách bài nộp của đề thi này' },
-          { status: 403 }
-        );
+      // If caller is the author of the exam: returns all submissions with isAuthor: true
+      if (exam.authorId && exam.authorId === currentUser.userId) {
+        const submissions = await examService.getSubmissions(examId);
+        return NextResponse.json({ success: true, submissions, isAuthor: true });
       }
 
-      const submissions = await examService.getSubmissions(examId);
-      return NextResponse.json({ success: true, submissions, isAuthor: true });
+      // If caller is NOT the author (student or other teacher): returns only their own submissions with isAuthor: false
+      const allExamSubs = await examService.getSubmissions(examId);
+      const mySubs = allExamSubs.filter(s => s.userId === currentUser.userId);
+      return NextResponse.json({ success: true, submissions: mySubs, isAuthor: false });
     }
 
     // Default: return only current user's personal submissions
@@ -50,20 +51,22 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const currentUser = getAuthUser(request);
-    if (!currentUser) {
-      return NextResponse.json(
-        { success: false, error: 'Vui lòng đăng nhập trước khi nộp bài' },
-        { status: 401 }
-      );
+    const body = await request.json();
+
+    if (!body.examId) {
+      return NextResponse.json({ success: false, error: 'Mã đề thi không hợp lệ' }, { status: 400 });
     }
 
-    const body = await request.json();
+    // Accept submission from logged in user or guest student
+    const studentName = (currentUser ? currentUser.fullName : (body.studentName && body.studentName.trim())) || 'Học sinh';
+    const studentPhone = body.studentPhone || null;
+    const userId = currentUser ? currentUser.userId : (body.userId || null);
 
     const submission = await examService.submitExam({
       examId: body.examId,
-      userId: currentUser.userId,
-      studentName: currentUser.fullName,
-      studentPhone: body.studentPhone || null,
+      userId,
+      studentName,
+      studentPhone,
       answers: body.answers,
       proctoringReport: body.proctoringReport,
     });

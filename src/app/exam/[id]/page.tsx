@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { useAuth } from '../../../context/AuthContext';
 import Link from 'next/link';
@@ -20,24 +20,20 @@ import { QuestionCard } from '../../../components/QuestionCard';
 import { QuestionNavGrid } from '../../../components/QuestionNavGrid';
 import { ProctoringModal } from '../../../components/ProctoringModal';
 import {
-  LogIn,
   Clock,
   Shield,
   CheckCircle,
   AlertCircle,
-  Maximize2,
   FileText,
   User,
   ArrowRight,
   ShieldAlert,
-  Loader2,
   BookOpen,
   Lock,
-  Shuffle,
   EyeOff,
   Calendar,
   Home,
-  Check,
+  LogIn,
 } from 'lucide-react';
 
 const DEFAULT_SAMPLE_EXAM: Exam = {
@@ -112,7 +108,8 @@ export default function ExamTakingPage() {
 
   const [exam, setExam] = useState<Exam>(DEFAULT_SAMPLE_EXAM);
   const [displayQuestions, setDisplayQuestions] = useState<Question[]>(DEFAULT_SAMPLE_EXAM.questions);
-  const [studentName, setStudentName] = useState('Học sinh');
+  const [studentName, setStudentName] = useState('');
+  const [studentPhone, setStudentPhone] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [accessError, setAccessError] = useState<string | null>(null);
   const { user, loading: authLoading } = useAuth();
@@ -120,6 +117,9 @@ export default function ExamTakingPage() {
   useEffect(() => {
     if (user?.fullName) {
       setStudentName(user.fullName);
+    }
+    if (user?.phone) {
+      setStudentPhone(user.phone);
     }
   }, [user]);
 
@@ -139,7 +139,7 @@ export default function ExamTakingPage() {
   const maxViolations = exam.settings?.maxViolations ?? 3;
 
   // Proctoring telemetry sensor
-  const { report, latestViolation, requestFullscreen, isFullscreen, getReport } = useProctoring({
+  const { report, latestViolation, requestFullscreen, getReport } = useProctoring({
     enabled: hasStarted && !isSubmitted && isProctoringEnabled,
     onViolation: () => {
       if (!isProctoringEnabled) return;
@@ -233,7 +233,14 @@ export default function ExamTakingPage() {
   };
 
   const handleStartExam = async () => {
-    // Validate access
+    // Validate candidate name if not logged in
+    const activeName = user?.fullName || studentName.trim();
+    if (!activeName) {
+      setAccessError('Vui lòng nhập họ và tên của bạn trước khi bắt đầu làm bài thi!');
+      return;
+    }
+
+    // Validate access (password / time limits)
     const check = validateExamAccess(exam.settings, passwordInput);
     if (!check.allowed) {
       if (check.reason === 'invalid_password') {
@@ -241,14 +248,14 @@ export default function ExamTakingPage() {
       } else if (check.reason === 'not_started') {
         setAccessError('Chưa đến thời gian mở đề thi!');
       } else if (check.reason === 'ended') {
-        setAccessError('Đề thi đã quá hạn chót nộp bài!');
+        setAccessError('Đề thi đã quá hạn chốt nộp bài!');
       }
       return;
     }
 
     setAccessError(null);
 
-    // Apply shuffling (questions are shuffled in position, but displayed sequentially 1..n)
+    // Apply shuffling
     const shuffled = shuffleExamQuestions(
       exam.questions,
       exam.settings?.shuffleQuestions ?? false,
@@ -278,13 +285,15 @@ export default function ExamTakingPage() {
     }
 
     const scoreResult = calculateScore(exam, answers);
+    const finalStudentName = user?.fullName || studentName.trim() || 'Học sinh';
+    const finalStudentPhone = user?.phone || studentPhone.trim() || null;
 
     let finalSubmission: Submission = {
       id: `sub-${Date.now()}`,
       examId: exam.id,
       userId: user?.id || null,
-      studentName: user?.fullName || studentName || 'Học sinh',
-      studentPhone: user?.phone || null,
+      studentName: finalStudentName,
+      studentPhone: finalStudentPhone,
       answers,
       score: scoreResult.score,
       totalScore: scoreResult.totalScore,
@@ -299,8 +308,8 @@ export default function ExamTakingPage() {
         body: JSON.stringify({
           examId: exam.id,
           userId: user?.id || null,
-          studentName: user?.fullName || studentName || 'Học sinh',
-          studentPhone: user?.phone || null,
+          studentName: finalStudentName,
+          studentPhone: finalStudentPhone,
           answers,
           proctoringReport: finalReport,
         }),
@@ -379,7 +388,7 @@ export default function ExamTakingPage() {
                 <span>Chế độ Ôn tập / Tự luyện</span>
               </div>
               <p className="text-xs text-emerald-800 leading-relaxed">
-                Đề thi không bật giám sát. Bạn có thể tự do phóng to, thu nhỏ, tra cứu tài liệu và chuyển tab mà không bị tính vi phạm gian lận.
+                Đề thi tự do không bật giám sát. Bạn có thể phóng to, thu nhỏ, tra cứu tài liệu và chuyển tab mà không bị tính vi phạm gian lận.
               </p>
             </div>
           )}
@@ -402,37 +411,8 @@ export default function ExamTakingPage() {
             </div>
           )}
 
-          {/* Authentication & Candidate Identity */}
-          {!authLoading && !user ? (
-            <div className="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-5 mb-6 text-left">
-              <div className="flex items-start gap-3">
-                <div className="p-2 rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-200">
-                  <User className="h-5 w-5" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-indigo-950">Yêu cầu đăng nhập tài khoản</h4>
-                  <p className="text-xs text-indigo-700 mt-1 leading-relaxed">
-                    Vui lòng đăng nhập để làm bài thi. Điểm số và bài làm của bạn sẽ được lưu chính xác vào danh sách cho người tạo đề xem.
-                  </p>
-                </div>
-              </div>
-              <div className="mt-4 flex flex-col sm:flex-row gap-2.5">
-                <Link
-                  href={`/login?redirect=/exam/${exam.id}`}
-                  className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-indigo-100 hover:bg-indigo-700 transition"
-                >
-                  <LogIn className="h-4 w-4" />
-                  <span>Đăng nhập để làm bài</span>
-                </Link>
-                <Link
-                  href={`/register?redirect=/exam/${exam.id}`}
-                  className="flex items-center justify-center gap-1.5 rounded-xl border border-indigo-300 bg-white px-4 py-2.5 text-xs font-bold text-indigo-700 hover:bg-indigo-50 transition"
-                >
-                  <span>Tạo tài khoản mới</span>
-                </Link>
-              </div>
-            </div>
-          ) : user ? (
+          {/* Candidate Identity Section */}
+          {user ? (
             <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5 flex items-center justify-between text-left">
               <div className="flex items-center gap-2.5">
                 <div className="h-8 w-8 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shadow-sm">
@@ -448,19 +428,48 @@ export default function ExamTakingPage() {
               </span>
             </div>
           ) : (
-            <div className="mb-4 text-left">
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                Họ và tên thí sinh:
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={studentName}
-                  onChange={e => setStudentName(e.target.value)}
-                  placeholder="Nhập họ và tên của bạn..."
-                  className="w-full rounded-xl border border-gray-300 py-2.5 pl-10 pr-4 text-sm font-medium focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
-                <User className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-gray-400" />
+            <div className="mb-5 text-left space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Họ và tên thí sinh <span className="text-rose-500">*</span>:
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={studentName}
+                    onChange={e => setStudentName(e.target.value)}
+                    placeholder="Nhập họ và tên của bạn để nộp bài..."
+                    className="w-full rounded-xl border border-gray-300 py-2.5 pl-10 pr-4 text-sm font-medium focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+                  />
+                  <User className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Lớp / Số điện thoại <span className="text-gray-400 font-normal">(tùy chọn)</span>:
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={studentPhone}
+                    onChange={e => setStudentPhone(e.target.value)}
+                    placeholder="Ví dụ: Lớp 12A1 hoặc 0912..."
+                    className="w-full rounded-xl border border-gray-300 py-2.5 pl-10 pr-4 text-sm font-medium focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+                  />
+                  <FileText className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-gray-500 pt-0.5">
+                <span>Đã có tài khoản Azota?</span>
+                <Link
+                  href={`/login?redirect=/exam/${exam.id}`}
+                  className="font-semibold text-indigo-600 hover:text-indigo-800 transition underline underline-offset-2 flex items-center gap-1"
+                >
+                  <LogIn className="h-3 w-3" />
+                  <span>Đăng nhập tài khoản</span>
+                </Link>
               </div>
             </div>
           )}
@@ -492,20 +501,14 @@ export default function ExamTakingPage() {
           )}
 
           <div className="space-y-2">
-            {(!user && !authLoading) ? (
-              <div className="text-center py-2 text-xs text-gray-500">
-                Hãy đăng nhập để mở khóa nút làm bài thi
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={handleStartExam}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition"
-              >
-                <span>{isProctoringEnabled ? 'Bật Fullscreen & Bắt đầu thi' : 'Bắt đầu làm bài thi'}</span>
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleStartExam}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition"
+            >
+              <span>{isProctoringEnabled ? 'Bật Fullscreen & Bắt đầu thi' : 'Bắt đầu làm bài thi'}</span>
+              <ArrowRight className="h-4 w-4" />
+            </button>
 
             <Link
               href="/"
@@ -598,13 +601,13 @@ export default function ExamTakingPage() {
                   {submission.proctoringReport.outScreenCount > 0 ? (
                     <ShieldAlert className="h-6 w-6" />
                   ) : (
-                    <CheckCircle className="h-6 w-6" />
+                    <Shield className="h-6 w-6" />
                   )}
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-gray-900">
                     {submission.proctoringReport.outScreenCount > 0
-                      ? `Phát hiện ${submission.proctoringReport.outScreenCount} lần chuyển màn hình`
+                      ? `Phát hiện ${submission.proctoringReport.outScreenCount} lần rời màn hình`
                       : 'Không phát hiện vi phạm quy chế thi'}
                   </h3>
                   <p className="text-xs text-gray-500">
@@ -681,7 +684,7 @@ export default function ExamTakingPage() {
             <div>
               <h1 className="text-sm font-bold text-gray-900 line-clamp-1">{exam.title}</h1>
               <p className="text-xs text-gray-500">
-                Thí sinh: <strong>{studentName}</strong>
+                Thí sinh: <strong>{user?.fullName || studentName || 'Học sinh'}</strong>
               </p>
             </div>
 
@@ -781,7 +784,7 @@ export default function ExamTakingPage() {
               <div className="rounded-xl border border-emerald-100 bg-white p-4 text-xs text-gray-600 shadow-sm">
                 <div className="flex items-center gap-2 font-bold text-emerald-800 mb-1">
                   <BookOpen className="h-4 w-4 text-emerald-600" />
-                  <span>Chế độ ôn tập</span>
+                  <span>Chế độ Ôn tập</span>
                 </div>
                 <p className="text-[11px] text-gray-500 leading-relaxed">
                   Đề thi tự do không tính vi phạm. Bạn có thể tự ôn luyện và kiểm tra lại câu trả lời trước khi nộp.
