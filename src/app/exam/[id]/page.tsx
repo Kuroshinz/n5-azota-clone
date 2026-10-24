@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '../../../context/AuthContext';
 import Link from 'next/link';
 import { Exam, Question, StudentAnswerValue, Submission, DEFAULT_EXAM_SETTINGS } from '../../../types/exam';
@@ -22,15 +22,12 @@ import { ProctoringModal } from '../../../components/ProctoringModal';
 import {
   Clock,
   Shield,
-  CheckCircle,
   AlertCircle,
   FileText,
   User,
   ArrowRight,
-  ShieldAlert,
   BookOpen,
   Lock,
-  EyeOff,
   Calendar,
   Home,
   LogIn,
@@ -104,6 +101,7 @@ const DEFAULT_SAMPLE_EXAM: Exam = {
 
 export default function ExamTakingPage() {
   const params = useParams();
+  const router = useRouter();
   const examId = (params?.id as string) || 'sample-exam-1';
 
   const [exam, setExam] = useState<Exam>(DEFAULT_SAMPLE_EXAM);
@@ -124,10 +122,8 @@ export default function ExamTakingPage() {
   }, [user]);
 
   const [hasStarted, setHasStarted] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAutoSubmitting, setIsAutoSubmitting] = useState(false);
-  const [submission, setSubmission] = useState<Submission | null>(null);
 
   const [answers, setAnswers] = useState<Record<number, StudentAnswerValue>>({});
   const [flaggedIds, setFlaggedIds] = useState<Set<number>>(new Set());
@@ -140,7 +136,7 @@ export default function ExamTakingPage() {
 
   // Proctoring telemetry sensor
   const { report, latestViolation, requestFullscreen, getReport } = useProctoring({
-    enabled: hasStarted && !isSubmitted && isProctoringEnabled,
+    enabled: hasStarted && isProctoringEnabled,
     onViolation: () => {
       if (!isProctoringEnabled) return;
       setShowWarningModal(true);
@@ -194,7 +190,7 @@ export default function ExamTakingPage() {
 
   // Countdown timer
   useEffect(() => {
-    if (!hasStarted || isSubmitted) return;
+    if (!hasStarted) return;
 
     const timer = setInterval(() => {
       setTimeLeftSeconds(prev => {
@@ -208,11 +204,11 @@ export default function ExamTakingPage() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [hasStarted, isSubmitted]);
+  }, [hasStarted]);
 
   // Answer selection & auto-save
   const handleSelectOption = (questionId: number, val: StudentAnswerValue) => {
-    if (isSubmitted || isAutoSubmitting) return;
+    if (isAutoSubmitting) return;
     const nextAnswers = { ...answers, [questionId]: val };
     setAnswers(nextAnswers);
     if (exam) {
@@ -271,7 +267,7 @@ export default function ExamTakingPage() {
   };
 
   const handleSubmitExam = async (forced = false) => {
-    if (!exam || isSubmitted || isSubmitting) return;
+    if (!exam || isSubmitting) return;
 
     setIsSubmitting(true);
     const finalReport = getReport();
@@ -323,12 +319,8 @@ export default function ExamTakingPage() {
     } finally {
       saveSubmission(finalSubmission);
       clearDraft(exam.id);
-      setSubmission(finalSubmission);
-      setIsSubmitted(true);
-      setIsSubmitting(false);
-      setIsAutoSubmitting(false);
-      setShowConfirmSubmit(false);
-      setShowWarningModal(false);
+      // Seamlessly redirect to the dedicated Result & Analysis Page!
+      router.push(`/exam/${exam.id}/result/${finalSubmission.id}`);
     }
   };
 
@@ -523,146 +515,6 @@ export default function ExamTakingPage() {
     );
   }
 
-  // Post-submission Review Screen
-  if (isSubmitted && submission) {
-    const policy = exam.settings?.showResultAfterSubmit || 'score_and_answers';
-    const scoreColor =
-      submission.score >= 8
-        ? 'text-emerald-600'
-        : submission.score >= 5
-        ? 'text-indigo-600'
-        : 'text-amber-600';
-
-    return (
-      <div className="min-h-screen bg-slate-100 pb-16">
-        {/* Top Header Result */}
-        <header className="border-b border-gray-200 bg-white px-6 py-4 shadow-sm">
-          <div className="mx-auto flex max-w-5xl items-center justify-between">
-            <div>
-              <div className="flex items-center gap-3">
-                <Link
-                  href="/"
-                  className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition bg-indigo-50 px-2 py-1 rounded-lg"
-                >
-                  <Home className="h-3.5 w-3.5" />
-                  <span>Trang chủ</span>
-                </Link>
-                <h1 className="text-base sm:text-lg font-bold text-gray-900 leading-tight">
-                  Kết quả bài thi: {exam.title}
-                </h1>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Thí sinh: <strong>{submission.studentName}</strong> | Nộp lúc:{' '}
-                {new Date(submission.submittedAt).toLocaleTimeString('vi-VN')}
-              </p>
-            </div>
-
-            {policy !== 'hidden' ? (
-              <div className="text-right">
-                <span className="text-xs font-semibold text-gray-400 block uppercase">Điểm số đạt được</span>
-                <span className={`text-2xl font-black ${scoreColor}`}>
-                  {submission.score} / {submission.totalScore}
-                </span>
-              </div>
-            ) : (
-              <div className="text-right">
-                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                  <EyeOff className="h-3.5 w-3.5" />
-                  Kết quả được ẩn
-                </span>
-              </div>
-            )}
-          </div>
-        </header>
-
-        <main className="mx-auto max-w-5xl px-6 pt-6">
-          {/* Policy = Hidden notice */}
-          {policy === 'hidden' && (
-            <div className="mb-6 rounded-2xl border border-indigo-200 bg-white p-6 shadow-sm text-center">
-              <CheckCircle className="mx-auto mb-3 h-10 w-10 text-emerald-500" />
-              <h3 className="text-base font-bold text-gray-900 mb-1">Bài thi đã nộp thành công!</h3>
-              <p className="text-xs text-gray-500 max-w-md mx-auto">
-                Giáo viên đã cài đặt ẩn điểm và đáp án. Điểm số của bạn sẽ được thông báo sau khi giáo viên công bố kết quả.
-              </p>
-            </div>
-          )}
-
-          {/* Proctoring telemetry summary badge */}
-          {isProctoringEnabled && (
-            <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-3">
-                <div
-                  className={`flex h-12 w-12 items-center justify-center rounded-2xl ${
-                    submission.proctoringReport.outScreenCount > 0
-                      ? 'bg-amber-100 text-amber-700'
-                      : 'bg-emerald-100 text-emerald-700'
-                  }`}
-                >
-                  {submission.proctoringReport.outScreenCount > 0 ? (
-                    <ShieldAlert className="h-6 w-6" />
-                  ) : (
-                    <Shield className="h-6 w-6" />
-                  )}
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-gray-900">
-                    {submission.proctoringReport.outScreenCount > 0
-                      ? `Phát hiện ${submission.proctoringReport.outScreenCount} lần rời màn hình`
-                      : 'Không phát hiện vi phạm quy chế thi'}
-                  </h3>
-                  <p className="text-xs text-gray-500">
-                    Thoát toàn màn hình: {submission.proctoringReport.fullscreenExitCount} lần | Tổng thời gian rời phòng: {submission.proctoringReport.totalOutDurationSeconds}s
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => window.location.reload()}
-                  className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition"
-                >
-                  Làm lại bài thi
-                </button>
-                <Link
-                  href="/"
-                  className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 transition"
-                >
-                  Về Trang chủ
-                </Link>
-              </div>
-            </div>
-          )}
-
-          {/* Policy = Score Only Notice */}
-          {policy === 'score_only' && (
-            <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm text-center">
-              <p className="text-xs text-gray-500">
-                Giáo viên chỉ cho phép xem điểm số và ẩn phần giải thích đáp án chi tiết của từng câu hỏi.
-              </p>
-            </div>
-          )}
-
-          {/* Full Solutions Review (Only if policy === score_and_answers) */}
-          {policy === 'score_and_answers' && (
-            <div className="space-y-4">
-              {displayQuestions.map((q, index) => (
-                <QuestionCard
-                  key={q.id}
-                  question={q}
-                  displayNumber={index + 1}
-                  selectedOption={answers[q.id]}
-                  showAnswer={true}
-                  readOnly={true}
-                />
-              ))}
-            </div>
-          )}
-        </main>
-      </div>
-    );
-  }
-
   // Active Exam Taking Screen
   return (
     <div className="min-h-screen bg-slate-100 pb-16">
@@ -717,11 +569,11 @@ export default function ExamTakingPage() {
 
             <button
               type="button"
-              disabled={isAutoSubmitting}
+              disabled={isAutoSubmitting || isSubmitting}
               onClick={() => setShowConfirmSubmit(true)}
               className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-md hover:bg-indigo-700 active:scale-95 transition disabled:opacity-50"
             >
-              Nộp bài thi
+              {isSubmitting ? 'Đang nộp...' : 'Nộp bài thi'}
             </button>
           </div>
         </div>
@@ -730,7 +582,7 @@ export default function ExamTakingPage() {
       {/* Main Examination Layout: 2 Columns */}
       <main className="mx-auto max-w-7xl px-6 pt-6">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-          {/* Question List (3 Cols) - ALWAYS numbered sequentially 1..n */}
+          {/* Question List (3 Cols) */}
           <div className="space-y-4 lg:col-span-3">
             {displayQuestions.map((q, index) => (
               <QuestionCard
@@ -828,6 +680,7 @@ export default function ExamTakingPage() {
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={() => setShowConfirmSubmit(false)}
                 className="rounded-xl border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition"
               >
@@ -835,10 +688,11 @@ export default function ExamTakingPage() {
               </button>
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={() => handleSubmitExam()}
-                className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-md hover:bg-indigo-700 transition"
+                className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-md hover:bg-indigo-700 transition disabled:opacity-50"
               >
-                Xác nhận nộp bài
+                {isSubmitting ? 'Đang nộp...' : 'Xác nhận nộp bài'}
               </button>
             </div>
           </div>
