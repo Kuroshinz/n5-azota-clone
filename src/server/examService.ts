@@ -1,4 +1,4 @@
-import { Exam, OptionKey, StudentAnswerValue, Submission } from '../types/exam';
+import { Exam, OptionKey, StudentAnswerValue, Submission, DEFAULT_EXAM_SETTINGS, ExamSettings } from '../types/exam';
 import { ProctoringReport } from '../types/proctoring';
 import { parseExamText } from '../parser/examParser';
 import { calculateScore } from '../storage/examStorage';
@@ -21,12 +21,17 @@ const DEFAULT_PROCTORING_REPORT: ProctoringReport = {
 export class ExamService {
   public async createExamFromText(rawText: string, metadata?: Partial<Exam>): Promise<Exam> {
     const parsed = parseExamText(rawText, metadata);
+    if (metadata?.settings) {
+      parsed.settings = metadata.settings;
+    }
     await this.saveExam(parsed);
     return parsed;
   }
 
   public async saveExam(exam: Exam): Promise<Exam> {
     const questionsJson = JSON.stringify(exam.questions || []);
+    const settingsJson = JSON.stringify(exam.settings || DEFAULT_EXAM_SETTINGS);
+
     await prisma.exam.upsert({
       where: { id: exam.id },
       create: {
@@ -35,6 +40,7 @@ export class ExamService {
         durationMinutes: exam.durationMinutes || 45,
         totalQuestions: exam.totalQuestions || exam.questions?.length || 0,
         questionsJson,
+        settingsJson,
         createdAt: exam.createdAt ? new Date(exam.createdAt) : new Date(),
       },
       update: {
@@ -42,6 +48,7 @@ export class ExamService {
         durationMinutes: exam.durationMinutes || 45,
         totalQuestions: exam.totalQuestions || exam.questions?.length || 0,
         questionsJson,
+        settingsJson,
       },
     });
     return exam;
@@ -60,6 +67,15 @@ export class ExamService {
       console.error('Failed to parse questionsJson for exam', id, e);
     }
 
+    let settings: ExamSettings = { ...DEFAULT_EXAM_SETTINGS };
+    try {
+      if (record.settingsJson) {
+        settings = { ...DEFAULT_EXAM_SETTINGS, ...JSON.parse(record.settingsJson) };
+      }
+    } catch (e) {
+      console.error('Failed to parse settingsJson for exam', id, e);
+    }
+
     return {
       id: record.id,
       title: record.title,
@@ -67,6 +83,7 @@ export class ExamService {
       totalQuestions: record.totalQuestions,
       createdAt: record.createdAt.toISOString(),
       questions,
+      settings,
     };
   }
 
@@ -82,6 +99,16 @@ export class ExamService {
       } catch (e) {
         console.error('Failed to parse questionsJson for exam', record.id, e);
       }
+
+      let settings: ExamSettings = { ...DEFAULT_EXAM_SETTINGS };
+      try {
+        if (record.settingsJson) {
+          settings = { ...DEFAULT_EXAM_SETTINGS, ...JSON.parse(record.settingsJson) };
+        }
+      } catch (e) {
+        console.error('Failed to parse settingsJson for exam', record.id, e);
+      }
+
       return {
         id: record.id,
         title: record.title,
@@ -89,6 +116,7 @@ export class ExamService {
         totalQuestions: record.totalQuestions,
         createdAt: record.createdAt.toISOString(),
         questions,
+        settings,
       };
     });
   }

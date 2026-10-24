@@ -17,6 +17,7 @@ export async function POST(request: Request) {
       const exam = await examService.createExamFromText(body.rawText, {
         title: body.title,
         durationMinutes: body.durationMinutes ? Number(body.durationMinutes) : 45,
+        settings: body.settings,
       });
       return NextResponse.json({ success: true, exam });
     }
