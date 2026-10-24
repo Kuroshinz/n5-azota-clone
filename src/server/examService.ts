@@ -11,6 +11,13 @@ export interface SubmitExamParams {
   proctoringReport: ProctoringReport;
 }
 
+const DEFAULT_PROCTORING_REPORT: ProctoringReport = {
+  outScreenCount: 0,
+  fullscreenExitCount: 0,
+  totalOutDurationSeconds: 0,
+  events: [],
+};
+
 export class ExamService {
   public async createExamFromText(rawText: string, metadata?: Partial<Exam>): Promise<Exam> {
     const parsed = parseExamText(rawText, metadata);
@@ -96,12 +103,7 @@ export class ExamService {
 
     const submissionId = `sub-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const answersJson = JSON.stringify(params.answers || {});
-    const proctoringReportJson = JSON.stringify(params.proctoringReport || {
-      totalViolations: 0,
-      tabSwitches: 0,
-      fullscreenExits: 0,
-      timeline: [],
-    });
+    const proctoringReportJson = JSON.stringify(params.proctoringReport || DEFAULT_PROCTORING_REPORT);
 
     const record = await prisma.submission.create({
       data: {
@@ -134,12 +136,7 @@ export class ExamService {
     if (!record) return null;
 
     let answers: Record<number, StudentAnswerValue> = {};
-    let proctoringReport: ProctoringReport = {
-      totalViolations: 0,
-      tabSwitches: 0,
-      fullscreenExits: 0,
-      timeline: [],
-    };
+    let proctoringReport: ProctoringReport = { ...DEFAULT_PROCTORING_REPORT };
 
     try {
       answers = JSON.parse(record.answersJson);
@@ -173,12 +170,7 @@ export class ExamService {
 
     return records.map(record => {
       let answers: Record<number, StudentAnswerValue> = {};
-      let proctoringReport: ProctoringReport = {
-        totalViolations: 0,
-        tabSwitches: 0,
-        fullscreenExits: 0,
-        timeline: [],
-      };
+      let proctoringReport: ProctoringReport = { ...DEFAULT_PROCTORING_REPORT };
 
       try {
         answers = JSON.parse(record.answersJson);

@@ -1,7 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { examService } from '../src/server/examService';
+import { prisma } from '../src/server/prisma';
 
 describe('Server Exam Service & API Logic', () => {
+  beforeEach(async () => {
+    await prisma.submission.deleteMany({});
+    await prisma.exam.deleteMany({});
+  });
+
   const sampleExamText = `
 Câu 1: Thủ đô của Việt Nam là gì?
 A. Hà Nội
@@ -18,8 +24,8 @@ D. 4
 Đáp án: C
   `.trim();
 
-  it('creates an exam from raw text with metadata and saves it', () => {
-    const exam = examService.createExamFromText(sampleExamText, {
+  it('creates an exam from raw text with metadata and saves it', async () => {
+    const exam = await examService.createExamFromText(sampleExamText, {
       title: 'Đề kiểm tra địa lý & toán',
       durationMinutes: 20,
     });
@@ -31,17 +37,19 @@ D. 4
     expect(exam.questions[0].correctAnswer).toBe('A');
     expect(exam.questions[1].correctAnswer).toBe('C');
 
-    const found = examService.getExam(exam.id);
-    expect(found).toEqual(exam);
+    const found = await examService.getExam(exam.id);
+    expect(found).not.toBeNull();
+    expect(found?.id).toBe(exam.id);
+    expect(found?.title).toBe(exam.title);
   });
 
-  it('handles student submission, scoring, and proctoring telemetry', () => {
-    const exam = examService.createExamFromText(sampleExamText, {
+  it('handles student submission, scoring, and proctoring telemetry', async () => {
+    const exam = await examService.createExamFromText(sampleExamText, {
       title: 'Đề thi trắc nghiệm',
       durationMinutes: 15,
     });
 
-    const submission = examService.submitExam({
+    const submission = await examService.submitExam({
       examId: exam.id,
       studentName: 'Lê Thị Mai',
       answers: {
@@ -69,10 +77,10 @@ D. 4
     expect(submission.totalScore).toBe(10.0);
     expect(submission.proctoringReport.outScreenCount).toBe(2);
 
-    const retrieved = examService.getSubmission(submission.id);
+    const retrieved = await examService.getSubmission(submission.id);
     expect(retrieved?.id).toBe(submission.id);
 
-    const list = examService.getSubmissions(exam.id);
+    const list = await examService.getSubmissions(exam.id);
     expect(list.some(s => s.id === submission.id)).toBe(true);
   });
 });
