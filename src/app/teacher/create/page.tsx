@@ -40,6 +40,9 @@ import {
   FileCheck,
   RefreshCw,
   HelpCircle,
+  ListOrdered,
+  Eye,
+  Columns,
 } from 'lucide-react';
 
 const SAMPLE_TEMPLATE = `ĐỀ THI MINH HỌA CHUẨN GDPT 2018
@@ -155,35 +158,45 @@ export default function CreateExamPage() {
         setTitle(baseTitle);
       }
 
-      // CASE 1: PDF Document (Direct client-side extraction + Server API fallback)
+      // CASE 1: PDF Document (Direct in-browser extraction using Web Workers & ArrayBuffer)
       if (ext === 'pdf') {
-        setExtractProgressMessage('Đang phân tích cấu trúc PDF và trích xuất câu hỏi...');
+        const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+        setExtractProgressMessage(`Đang đọc file PDF (${sizeMb} MB) vào bộ nhớ...`);
         let extractedSuccessfully = false;
+        let clientErrorMsg = '';
 
-        // Try direct in-browser extraction first (No 4.5MB payload limit, zero network delay)
+        // Try direct in-browser extraction first (Supports files of ANY size like 13MB, 50MB with zero network upload limit)
         try {
           const buffer = await file.arrayBuffer();
-          const result = await extractTextFromPdf(buffer);
+          const result = await extractTextFromPdf(buffer, (step) => {
+            setExtractProgressMessage(step);
+          });
 
           if (result.rawText && result.rawText.trim().length > 0) {
             setRawText(result.rawText);
             setExtractedInfo({
               fileName: file.name,
-              fileSize: `${(file.size / 1024).toFixed(1)} KB`,
+              fileSize: `${sizeMb} MB`,
               fileType: 'pdf',
               pageCount: result.pageCount,
               detectedQuestions: result.questionCount,
             });
             extractedSuccessfully = true;
+          } else {
+            throw new Error('File PDF không chứa lớp văn bản có thể nhận diện (có thể là file scan hình ảnh).');
           }
         } catch (clientErr: any) {
-          console.warn('In-browser PDF parsing encountered an error, trying server route...', clientErr);
+          console.warn('In-browser PDF parsing encountered an error, attempting server fallback if eligible...', clientErr);
+          clientErrorMsg = clientErr?.message || 'Lỗi bóc tách PDF trên trình duyệt';
         }
 
         // If client-side couldn't extract or failed, attempt server route if file size is permitted
         if (!extractedSuccessfully) {
           if (file.size > 4.2 * 1024 * 1024) {
-            throw new Error(`File PDF có dung lượng lớn (${(file.size / (1024 * 1024)).toFixed(1)} MB). Vui lòng thử nén dung lượng file hoặc chuyển sang định dạng Word (.docx).`);
+            throw new Error(
+              `Không thể trích xuất văn bản từ file PDF (${sizeMb} MB): ${clientErrorMsg}. ` +
+              `Vui lòng kiểm tra lại xem file PDF có thể bôi đen chữ được không, hoặc chuyển sang định dạng Word (.docx).`
+            );
           }
 
           setExtractProgressMessage('Đang kết nối máy chủ phân tích tài liệu...');
@@ -275,7 +288,7 @@ export default function CreateExamPage() {
     setRawText(updated);
   };
 
-  const handleInsertTemplate = (type: 'mc' | 'tf' | 'sa' | 'math') => {
+  const handleInsertTemplate = (type: 'mc' | 'tf' | 'sa' | 'math' | 'table') => {
     const nextNum = parsedExam.questions.length + 1;
     let snippet = '';
 
@@ -287,6 +300,8 @@ export default function CreateExamPage() {
       snippet = `\n\nCâu ${nextNum}: Nhập câu hỏi yêu cầu tính ra đáp số cụ thể.\nĐáp số: 10\nHướng dẫn giải:\nTrình bày các bước tính toán tại đây.`;
     } else if (type === 'math') {
       snippet = ` $f(x) = \\int_0^1 \\sqrt{x^2 + 1} dx$ `;
+    } else if (type === 'table') {
+      snippet = `\n\nBẢNG ĐÁP ÁN:\n1. A   2. B   3. C   4. D   5. A\n6. B   7. C   8. D   9. A   10. B\n`;
     }
 
     setRawText(prev => prev + snippet);
@@ -366,7 +381,7 @@ export default function CreateExamPage() {
             <button
               type="button"
               onClick={() => setIsSettingsModalOpen(true)}
-              className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3.5 py-2 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50 hover:border-indigo-300 transition"
+              className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3.5 py-2 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50 hover:border-indigo-300 transition cursor-pointer"
             >
               <Settings className="h-4 w-4 text-indigo-600" />
               <span>Cấu hình đề thi</span>
@@ -510,7 +525,7 @@ export default function CreateExamPage() {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-600 hover:bg-gray-100 transition"
+                    className="rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-600 hover:bg-gray-100 transition cursor-pointer"
                     title="Đổi file khác"
                   >
                     Đổi file
@@ -555,7 +570,7 @@ export default function CreateExamPage() {
                         </div>
                       </div>
                       <h4 className="text-sm font-bold text-gray-800">Đang phân tích cấu trúc tài liệu...</h4>
-                      <p className="text-xs text-gray-500 max-w-sm">
+                      <p className="text-xs text-indigo-600 font-medium max-w-sm animate-pulse">
                         {extractProgressMessage || 'Hệ thống đang trích xuất văn bản, bảng đáp án và công thức toán học...'}
                       </p>
                     </div>
@@ -568,7 +583,7 @@ export default function CreateExamPage() {
                         Kéo thả file Đề thi vào đây
                       </h3>
                       <p className="mt-1 text-xs text-gray-500 max-w-sm leading-relaxed">
-                        Hỗ trợ định dạng <strong>PDF (.pdf)</strong>, <strong>Word (.docx)</strong> hoặc <strong>Text (.txt)</strong>.
+                        Hỗ trợ định dạng <strong>PDF (.pdf)</strong> không giới hạn dung lượng, <strong>Word (.docx)</strong> hoặc <strong>Text (.txt)</strong>.
                         Tự động nhận diện câu hỏi trắc nghiệm, đúng/sai, trả lời ngắn và công thức KaTeX.
                       </p>
 
@@ -606,7 +621,7 @@ export default function CreateExamPage() {
                       <button
                         type="button"
                         onClick={handleNormalizeChoices}
-                        className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 font-semibold text-gray-700 hover:bg-gray-100 hover:border-indigo-300 transition"
+                        className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 font-semibold text-gray-700 hover:bg-gray-100 hover:border-indigo-300 transition cursor-pointer"
                         title="Tách các đáp án A, B, C, D nằm cùng hàng thành từng dòng riêng biệt"
                       >
                         <Wand2 className="h-3 w-3 text-indigo-600" />
@@ -616,7 +631,7 @@ export default function CreateExamPage() {
                       <button
                         type="button"
                         onClick={handleCleanHeaderFooters}
-                        className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 font-semibold text-gray-700 hover:bg-gray-100 hover:border-indigo-300 transition"
+                        className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 font-semibold text-gray-700 hover:bg-gray-100 hover:border-indigo-300 transition cursor-pointer"
                         title="Xóa bỏ các số trang 'Trang 1/5' hoặc tiêu đề lặp lại"
                       >
                         <Trash2 className="h-3 w-3 text-rose-600" />
@@ -628,7 +643,7 @@ export default function CreateExamPage() {
                       <button
                         type="button"
                         onClick={() => handleInsertTemplate('mc')}
-                        className="rounded-lg bg-indigo-50 border border-indigo-200 px-2 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100 transition"
+                        className="rounded-lg bg-indigo-50 border border-indigo-200 px-2 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100 transition cursor-pointer"
                         title="Chèn mẫu trắc nghiệm 4 lựa chọn"
                       >
                         + Trắc nghiệm
@@ -636,7 +651,7 @@ export default function CreateExamPage() {
                       <button
                         type="button"
                         onClick={() => handleInsertTemplate('tf')}
-                        className="rounded-lg bg-emerald-50 border border-emerald-200 px-2 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 transition"
+                        className="rounded-lg bg-emerald-50 border border-emerald-200 px-2 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 transition cursor-pointer"
                         title="Chèn mẫu đúng / sai 4 ý"
                       >
                         + Đúng/Sai
@@ -644,15 +659,23 @@ export default function CreateExamPage() {
                       <button
                         type="button"
                         onClick={() => handleInsertTemplate('sa')}
-                        className="rounded-lg bg-purple-50 border border-purple-200 px-2 py-1 text-[11px] font-bold text-purple-700 hover:bg-purple-100 transition"
+                        className="rounded-lg bg-purple-50 border border-purple-200 px-2 py-1 text-[11px] font-bold text-purple-700 hover:bg-purple-100 transition cursor-pointer"
                         title="Chèn mẫu trả lời ngắn"
                       >
                         + Điền đáp số
                       </button>
                       <button
                         type="button"
+                        onClick={() => handleInsertTemplate('table')}
+                        className="rounded-lg bg-cyan-50 border border-cyan-200 px-2 py-1 text-[11px] font-bold text-cyan-700 hover:bg-cyan-100 transition cursor-pointer"
+                        title="Chèn bảng đáp án cuối đề để hệ thống tự khớp"
+                      >
+                        📋 Bảng đáp án
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleInsertTemplate('math')}
-                        className="rounded-lg bg-amber-50 border border-amber-200 px-2 py-1 text-[11px] font-bold text-amber-700 hover:bg-amber-100 transition flex items-center gap-0.5"
+                        className="rounded-lg bg-amber-50 border border-amber-200 px-2 py-1 text-[11px] font-bold text-amber-700 hover:bg-amber-100 transition flex items-center gap-0.5 cursor-pointer"
                         title="Chèn mẫu công thức Toán KaTeX"
                       >
                         <Sigma className="h-3 w-3" />
