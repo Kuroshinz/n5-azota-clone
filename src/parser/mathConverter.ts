@@ -89,7 +89,13 @@ export function normalizeMathFormulas(rawText: string): string {
   // 7. Chemistry Formulas: Automatic subscripts for common chemical compounds
   const CHEM_REGEX = /\b(H2SO4|HNO3|HCl|H2O|CO2|SO2|SO3|CaCO3|BaSO4|Fe3O4|Fe2O3|FeO|CuSO4|KMnO4|Al2O3|NaOH|KOH|Ca\(OH\)2|Ba\(OH\)2|Na2CO3|NaHCO3|CH4|C2H4|C2H2|C6H6|C2H5OH|CH3COOH|NaCl|O2|N2|H2|Cl2|Fe\(OH\)3|Fe\(OH\)2|Al\(OH\)3|Al2\(SO4\)3|Fe2\(SO4\)3|FeSO4|Cu\(OH\)2)\b/g;
 
-  text = text.replace(CHEM_REGEX, (match) => {
+  text = text.replace(CHEM_REGEX, (match, _p1, offset, str) => {
+    // If preceded by \text{ or already inside math $, do not replace
+    const before = str.slice(0, offset);
+    const dollarCount = (before.match(/\$/g) || []).length;
+    if (dollarCount % 2 === 1) return match;
+    if (/\\(?:text|mathrm|mathbf)\s*\{[^}]*$/.test(before)) return match;
+
     // Convert numbers after elements to subscript: e.g. H2SO4 -> \text{H}_2\text{SO}_4
     const latexSub = match.replace(/([A-Za-z\(\)])(\d+)/g, '$1_$2');
     return `$\\text{${latexSub}}$`;

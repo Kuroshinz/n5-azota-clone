@@ -38,7 +38,16 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
   // Step 1: Normalize formulas
   let text = normalizeMathFormulas(rawText.trim());
 
-  // Step 2: Extract end-of-file answer table if present (e.g., BẢNG ĐÁP ÁN)
+  // Step 2: Extract document title if not explicitly provided
+  let detectedTitle = metadata?.title;
+  if (!detectedTitle || detectedTitle === 'Đề thi trắc nghiệm' || detectedTitle === 'Đề thi minh họa chuẩn GDPT 2018') {
+    const titleMatch = text.match(/(?:^|\n)(?:ĐỀ\s+CƯƠNG|ĐỀ\s+THI|ĐỀ\s+KIỂM\s+TRA|BÀI\s+KIỂM\s+TRA|KIỂM\s+TRA)[^\n\r]+/i);
+    if (titleMatch) {
+      detectedTitle = titleMatch[0].trim();
+    }
+  }
+
+  // Step 3: Extract end-of-file answer table if present (e.g., BẢNG ĐÁP ÁN)
   const tableAnswers = new Map<number, OptionKey>();
   const tableMatch = text.match(/(?:^|\n)(?:BẢNG ĐÁP ÁN|BẢNG TRẢ LỜI|ANSWER KEY)[\s.:]*\n*([\s\S]*)$/i);
   if (tableMatch && tableMatch.index !== undefined) {
@@ -53,7 +62,7 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
     text = text.substring(0, tableMatch.index).trim();
   }
 
-  // Step 3: Split into question blocks
+  // Step 4: Split into question blocks
   const questionHeaderRegex = /(?:^|\n)(?:Câu|Bài|Question)\s*(\d+)[\s.:]+/gi;
   const matches: { index: number; length: number; qNum: number }[] = [];
   let qMatch: RegExpExecArray | null;
@@ -105,7 +114,7 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
     return line.startsWith('|') && line.endsWith('|');
   };
 
-  // Step 4: Parse each question block
+  // Step 5: Parse each question block
   const questions: Question[] = validBlocks.map((block, index) => {
     let blockContent = block.rawText;
     let explanation: string | undefined = undefined;
@@ -113,29 +122,13 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
     let acceptedAnswers: string[] | undefined = undefined;
     let subItems: SubQuestionItem[] | undefined = undefined;
 
-    // Check for explanation: Lời giải / Hướng dẫn giải / Giải thích / HDG
-    const expMatch = blockContent.match(/(?:^|\n)(?:Lời giải|Hướng dẫn giải|Giải thích|HDG)[\s.:]+([\s\S]*)$/i);
-    if (expMatch && expMatch.index !== undefined) {
-      explanation = expMatch[1].trim();
-      blockContent = blockContent.substring(0, expMatch.index).trim();
-    }
-
-    // Extract answer line if present: e.g. "Đáp án: A", "Đáp án: a) Đ, b) S", "Đáp số: 12.5", "ĐA. 3"
-    let rawAnswerLine = '';
-    const ansMatch = blockContent.match(/(?:^|\n)(?:Đáp án|Đáp số|Chọn|Key|Kết quả|ĐA)[\s.:]+([^\n\r]+)/i);
-    if (ansMatch && ansMatch.index !== undefined) {
-      rawAnswerLine = ansMatch[1].trim();
-      blockContent = blockContent.substring(0, ansMatch.index) + blockContent.substring(ansMatch.index + ansMatch[0].length);
-      blockContent = blockContent.trim();
-    }
-
     // Remove the leading "Câu X:", "Bài X." header
     const headerPrefixMatch = blockContent.match(/^(?:Câu|Bài|Question)\s*\d+[\s.:]+\s*/i);
     if (headerPrefixMatch) {
       blockContent = blockContent.substring(headerPrefixMatch[0].length);
     }
 
-    // Check for Part II True/False sub-items matching a), b), c), d)
+    // Step A: Check for Part II True/False sub-items BEFORE slicing out explanations!
     const subItemRegex = /(?:^|\n|\t|\s{2,})([a-d])[\s.:\)]+\s*/g;
     const subMatches: { index: number; length: number; key: 'a' | 'b' | 'c' | 'd' }[] = [];
     let subMatch: RegExpExecArray | null;
@@ -149,37 +142,27 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
       });
     }
 
-    // Check for Part I Multiple Choice options A, B, C, D (supports tabs, newlines, or multiple/single spaces before option)
-    const optionRegex = /(?:^|\n|\t|\s{2,}|(?<=[.!?,\)\]])\s+|\s+(?=[A-D][.:\)]))(\*?)([A-D])[\s.:\)]+\s*/g;
-    const optionMatches: { index: number; length: number; isAsterisk: boolean; key: OptionKey }[] = [];
-    let optMatch: RegExpExecArray | null;
-
-    while ((optMatch = optionRegex.exec(blockContent)) !== null) {
-      if (isInsideMarkdownTable(blockContent, optMatch.index)) continue;
-      optionMatches.push({
-        index: optMatch.index,
-        length: optMatch[0].length,
-        isAsterisk: optMatch[1] === '*',
-        key: optMatch[2].toUpperCase() as OptionKey,
-      });
-    }
+    // Check if the block has True/False answer markers (e.g. "[ĐÚNG]", "[SAI]", "Đáp án: a) Đ", etc.)
+    const hasTfIndicators = /(?:\[\s*(?:ĐÚNG|SAI|TRUE|FALSE|Đ|S)\s*\]|[→\-—\:]\s*(?:ĐÚNG|SAI|TRUE|FALSE)|(?:Đáp án|Key)[\s.:]+[a-d][\s.:\)\-_]+[ĐS])/i.test(blockContent);
 
     let questionType: QuestionType = 'multiple_choice';
     let questionContent = '';
     const options: Option[] = [];
 
-    if (subMatches.length >= 2) {
-      // Recognized as True/False (Part II)
+    if (subMatches.length >= 2 && hasTfIndicators) {
+      // Recognized as Part II True/False
       questionType = 'true_false';
       questionContent = blockContent.substring(0, subMatches[0].index).trim();
       subItems = [];
+      const tfExplanations: string[] = [];
 
-      // Parse answer map for True/False from rawAnswerLine
+      // Parse external answer line if present (e.g. "Đáp án: a) Đ, b) S, c) Đ, d) S")
       const tfAnswersMap = new Map<string, boolean>();
-      if (rawAnswerLine) {
+      const ansMatch = blockContent.match(/(?:^|\n)(?:Đáp án|Đáp số|Chọn|Key|Kết quả|ĐA)[\s.:]+([^\n\r]+)/i);
+      if (ansMatch) {
         const tfRegex = /([a-d])[\s.:\)\-_]+([ĐS]|Đúng|Sai|True|False)(?=[,\s;]|$)/gi;
         let tfM: RegExpExecArray | null;
-        while ((tfM = tfRegex.exec(rawAnswerLine)) !== null) {
+        while ((tfM = tfRegex.exec(ansMatch[1])) !== null) {
           const k = tfM[1].toLowerCase();
           const v = tfM[2].toUpperCase();
           const isTrue = v === 'Đ' || v === 'ĐÚNG' || v === 'TRUE';
@@ -190,57 +173,123 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
       for (let j = 0; j < subMatches.length; j++) {
         const curr = subMatches[j];
         const next = subMatches[j + 1];
-        const start = curr.index + curr.length;
-        const end = next ? next.index : blockContent.length;
-        const subText = blockContent.substring(start, end).trim();
+        const rawChunk = blockContent.substring(curr.index + curr.length, next ? next.index : blockContent.length).trim();
+
+        let itemText = rawChunk;
+        // Check for per-item explanation: "Giải thích: ..." or "Lời giải: ..."
+        const expM = rawChunk.match(/(?:^|\n)(?:Lời giải(?:\s+chi\s+tiết)?|Giải thích|Hướng dẫn giải|HDG)[\s.:]+([\s\S]*)$/i);
+        if (expM && expM.index !== undefined) {
+          itemText = rawChunk.substring(0, expM.index).trim();
+          const itemExpl = expM[1].trim();
+          tfExplanations.push(`${curr.key}) ${itemExpl}`);
+        }
+
+        // Check for inline answer: e.g. "→ [ĐÚNG]", "-> [SAI]", "[ĐÚNG]", "[SAI]", "→ ĐÚNG"
+        let itemAnswer: boolean | undefined = undefined;
+        const ansM = itemText.match(/(?:[→\-—\:]*\s*\[?(ĐÚNG|SAI|TRUE|FALSE|Đ|S)\]?)\s*$/i);
+        if (ansM) {
+          const v = ansM[1].toUpperCase();
+          itemAnswer = v === 'Đ' || v === 'ĐÚNG' || v === 'TRUE';
+          itemText = itemText.substring(0, ansM.index).trim();
+        } else {
+          itemAnswer = tfAnswersMap.get(curr.key);
+        }
 
         subItems.push({
           key: curr.key,
-          content: subText,
-          correctAnswer: tfAnswersMap.get(curr.key),
-        });
-      }
-    } else if (optionMatches.length > 0) {
-      // Recognized as Multiple Choice (Part I)
-      questionType = 'multiple_choice';
-      questionContent = blockContent.substring(0, optionMatches[0].index).trim();
-
-      for (let j = 0; j < optionMatches.length; j++) {
-        const currOpt = optionMatches[j];
-        const nextOpt = optionMatches[j + 1];
-        const optStart = currOpt.index + currOpt.length;
-        const optEnd = nextOpt ? nextOpt.index : blockContent.length;
-        const optText = blockContent.substring(optStart, optEnd).trim();
-
-        if (currOpt.isAsterisk) {
-          detectedAnswer = currOpt.key;
-        }
-
-        options.push({
-          key: currOpt.key,
-          content: optText,
+          content: itemText,
+          correctAnswer: itemAnswer,
         });
       }
 
-      if (!detectedAnswer && rawAnswerLine) {
-        const directChoice = rawAnswerLine.match(/^([A-D])\b/i);
-        if (directChoice) {
-          detectedAnswer = directChoice[1].toUpperCase() as OptionKey;
-        }
-      }
-
-      if (!detectedAnswer) {
-        detectedAnswer = tableAnswers.get(block.qNum) || tableAnswers.get(index + 1);
+      if (tfExplanations.length > 0) {
+        explanation = tfExplanations.join('\n');
       }
     } else {
-      // Recognized as Short Answer (Part III)
-      questionType = 'short_answer';
-      questionContent = blockContent.trim();
-      if (rawAnswerLine) {
-        const cleanAns = rawAnswerLine.trim();
-        acceptedAnswers = [cleanAns];
-        if (cleanAns.includes(',')) {
-          acceptedAnswers.push(cleanAns.replace(/,/g, '.'));
+      // Step B: For Part I Multiple Choice and Part III Short Answer
+      const expMatch = blockContent.match(/(?:^|\n)(?:Lời giải(?:\s+chi\s+tiết)?|Hướng dẫn giải|Giải thích|HDG)[\s.:]+([\s\S]*)$/i);
+      if (expMatch && expMatch.index !== undefined) {
+        explanation = expMatch[1].trim();
+        blockContent = blockContent.substring(0, expMatch.index).trim();
+      }
+
+      let rawAnswerLine = '';
+      const ansMatch = blockContent.match(/(?:^|\n)(?:Đáp án|Đáp số|Chọn|Key|Kết quả|ĐA)[\s.:]+([^\n\r]+)/i);
+      if (ansMatch && ansMatch.index !== undefined) {
+        rawAnswerLine = ansMatch[1].trim();
+        blockContent = blockContent.substring(0, ansMatch.index) + blockContent.substring(ansMatch.index + ansMatch[0].length);
+        blockContent = blockContent.trim();
+      }
+
+      // Check for MC options A, B, C, D
+      const optionRegex = /(?:^|\n|\t|\s{2,}|(?<=[.!?,\)\]])\s+|\s+(?=[A-D][.:\)]))(\*?)([A-D])[\s.:\)]+\s*/g;
+      const optionMatches: { index: number; length: number; isAsterisk: boolean; key: OptionKey }[] = [];
+      let optMatch: RegExpExecArray | null;
+
+      while ((optMatch = optionRegex.exec(blockContent)) !== null) {
+        if (isInsideMarkdownTable(blockContent, optMatch.index)) continue;
+        optionMatches.push({
+          index: optMatch.index,
+          length: optMatch[0].length,
+          isAsterisk: optMatch[1] === '*',
+          key: optMatch[2].toUpperCase() as OptionKey,
+        });
+      }
+
+      if (optionMatches.length > 0) {
+        questionType = 'multiple_choice';
+        questionContent = blockContent.substring(0, optionMatches[0].index).trim();
+
+        for (let j = 0; j < optionMatches.length; j++) {
+          const currOpt = optionMatches[j];
+          const nextOpt = optionMatches[j + 1];
+          const optStart = currOpt.index + currOpt.length;
+          const optEnd = nextOpt ? nextOpt.index : blockContent.length;
+          const optText = blockContent.substring(optStart, optEnd).trim();
+
+          if (currOpt.isAsterisk) {
+            detectedAnswer = currOpt.key;
+          }
+
+          options.push({
+            key: currOpt.key,
+            content: optText,
+          });
+        }
+
+        if (!detectedAnswer && rawAnswerLine) {
+          const directChoice = rawAnswerLine.match(/^([A-D])\b/i);
+          if (directChoice) {
+            detectedAnswer = directChoice[1].toUpperCase() as OptionKey;
+          }
+        }
+
+        if (!detectedAnswer) {
+          detectedAnswer = tableAnswers.get(block.qNum) || tableAnswers.get(index + 1);
+        }
+      } else {
+        // Recognized as Short Answer (Part III)
+        questionType = 'short_answer';
+        questionContent = blockContent.trim();
+        if (rawAnswerLine) {
+          const cleanAns = rawAnswerLine.trim();
+          acceptedAnswers = [cleanAns];
+
+          // If answer contains decimals with comma: "12,5" -> add "12.5"
+          if (cleanAns.includes(',')) {
+            acceptedAnswers.push(cleanAns.replace(/,/g, '.'));
+          }
+
+          // If answer contains extra text like "3 (Đáp án C)" or "150 - 200 bar (hoặc 200)"
+          const leadingNum = cleanAns.match(/^([0-9.,]+)/);
+          if (leadingNum && !acceptedAnswers.includes(leadingNum[1])) {
+            acceptedAnswers.push(leadingNum[1]);
+          }
+
+          const altMatch = cleanAns.match(/\(hoặc\s+([^)]+)\)/i);
+          if (altMatch && !acceptedAnswers.includes(altMatch[1].trim())) {
+            acceptedAnswers.push(altMatch[1].trim());
+          }
         }
       }
     }
@@ -261,7 +310,7 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
 
   return {
     id: metadata?.id || `exam-${Date.now()}`,
-    title: metadata?.title || 'Đề thi trắc nghiệm',
+    title: detectedTitle || 'Đề thi trắc nghiệm',
     durationMinutes: metadata?.durationMinutes || 45,
     totalQuestions: questions.length,
     questions,
