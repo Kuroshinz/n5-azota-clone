@@ -264,4 +264,64 @@ D. (-infinity; 0)
     const exam = parseExamText(raw, { title: 'Đề thi có hình ảnh' });
     expect(exam.questions[0].content).toContain('![Hình vẽ](data:image/png;base64,sample123)');
   });
+  it('correctly parses Markdown format exam matching Tinhoc.md with multiple choice and true/false sub-items', () => {
+    const markdownExam = `
+PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn. Thí sinh trả lời từ câu 1 đến câu 2.
+
+Câu 1. Hệ điều hành nào dưới đây đánh dấu bước ngoặt lớn với giao diện đồ họa GUI và thanh tác vụ Taskbar?
+A. Windows 1.0
+B. Windows 3.1
+*C. Windows 95
+D. Windows XP
+Lời giải:
+Windows 95 ra đời năm 1995 đánh dấu bước nhảy vọt với giao diện GUI thân thiện.
+
+Câu 2. Thiết bị nào sau đây dùng để kết nối mạng LAN qua sóng vô tuyến?
+*A. Access Point (AP)
+B. Switch
+C. Router có dây
+D. Cáp xoắn đôi
+Lời giải: Access Point cung cấp kết nối mạng không dây.
+
+PHẦN II. Câu trắc nghiệm đúng sai. Thí sinh trả lời từ câu 1 đến câu 1.
+
+Câu 1. Cho biết các nhận định về lưu trữ đám mây và Google Drive:
+a) Google Drive cung cấp 15GB miễn phí dùng chung cho Gmail, Drive và Photos.
+→ [ĐÚNG]
+Giải thích: Đúng theo chính sách hiện hành của Google.
+b) Người dùng không thể chia sẻ tệp với quyền "Chỉ xem" (Viewer).
+→ [SAI]
+Giải thích: Người dùng hoàn toàn có thể phân quyền Viewer, Commenter, Editor.
+c) Tính năng đồng bộ tự động giúp sao lưu dữ liệu từ máy tính lên đám mây theo thời gian thực.
+→ [ĐÚNG]
+Giải thích: Ứng dụng Google Drive for Desktop hỗ trợ đồng bộ tự động.
+d) Tệp bị xóa khỏi Drive sẽ biến mất vĩnh viễn ngay lập tức mà không vào Thùng rác.
+→ [SAI]
+Giải thích: Tệp sẽ được giữ trong Thùng rác 30 ngày trước khi bị xóa vĩnh viễn.
+`.trim();
+
+    const exam = parseExamText(markdownExam, { title: 'Đề Tin học THPT' });
+    expect(exam.questions).toHaveLength(3);
+
+    // Question 1: Multiple choice
+    expect(exam.questions[0].type).toBe('multiple_choice');
+    expect(exam.questions[0].correctAnswer).toBe('C');
+    expect(exam.questions[0].options).toHaveLength(4);
+    expect(exam.questions[0].explanation).toContain('Windows 95 ra đời năm 1995');
+
+    // Question 2: Multiple choice
+    expect(exam.questions[1].type).toBe('multiple_choice');
+    expect(exam.questions[1].correctAnswer).toBe('A');
+
+    // Question 3: True / False with sub-items
+    const tfQuestion = exam.questions[2];
+    expect(tfQuestion.type).toBe('true_false');
+    expect(tfQuestion.subItems).toHaveLength(4);
+    expect(tfQuestion.subItems?.[0].correctAnswer).toBe(true);
+    expect(tfQuestion.subItems?.[1].correctAnswer).toBe(false);
+    expect(tfQuestion.subItems?.[2].correctAnswer).toBe(true);
+    expect(tfQuestion.subItems?.[3].correctAnswer).toBe(false);
+    expect(tfQuestion.explanation).toContain('a) Đúng theo chính sách hiện hành của Google.');
+    expect(tfQuestion.explanation).toContain('b) Người dùng hoàn toàn có thể phân quyền Viewer');
+  });
 });

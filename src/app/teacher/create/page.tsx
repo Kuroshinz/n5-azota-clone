@@ -111,7 +111,7 @@ export default function CreateExamPage() {
   const [extractedInfo, setExtractedInfo] = useState<{
     fileName: string;
     fileSize: string;
-    fileType: 'pdf' | 'docx' | 'txt';
+    fileType: 'pdf' | 'docx' | 'txt' | 'md';
     imageCount?: number;
     pageCount?: number;
     detectedQuestions?: number;
@@ -146,8 +146,8 @@ export default function CreateExamPage() {
   const handleProcessFile = async (file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase();
 
-    if (ext !== 'pdf' && ext !== 'docx' && ext !== 'txt') {
-      alert('Vui lòng chọn file định dạng PDF (.pdf), Word (.docx) hoặc Văn bản thuần (.txt)!');
+    if (ext !== 'pdf' && ext !== 'docx' && ext !== 'txt' && ext !== 'md') {
+      alert('Vui lòng chọn file định dạng PDF (.pdf), Word (.docx), Văn bản (.txt) hoặc Markdown (.md)!');
       return;
     }
 
@@ -299,6 +299,18 @@ export default function CreateExamPage() {
           fileType: 'txt',
         });
       }
+      // CASE 4: Markdown File (.md)
+      else if (ext === 'md') {
+        setExtractProgressMessage('Đang nạp và phân tích file Markdown (.md)...');
+        const textContent = await file.text();
+        const cleaned = cleanPdfExamText(textContent);
+        setRawText(cleaned);
+        setExtractedInfo({
+          fileName: file.name,
+          fileSize: `${(file.size / 1024).toFixed(1)} KB`,
+          fileType: 'md',
+        });
+      }
 
       // Automatically switch to editable text mode for immediate inspection & refinement
       setInputMode('text');
@@ -415,7 +427,7 @@ export default function CreateExamPage() {
                 </span>
               </h1>
               <p className="text-xs text-gray-500 mt-0.5">
-                Hỗ trợ tải lên file <strong>PDF</strong>, <strong>Word (.docx)</strong> hoặc văn bản để tự động bóc tách & chỉnh sửa
+                Hỗ trợ tải lên file <strong>PDF</strong>, <strong>Word (.docx)</strong>, <strong>Markdown (.md)</strong> hoặc văn bản để tự động bóc tách & chỉnh sửa
               </p>
             </div>
           </div>
@@ -555,6 +567,8 @@ export default function CreateExamPage() {
                       ? 'bg-rose-100 text-rose-700'
                       : extractedInfo.fileType === 'docx'
                       ? 'bg-blue-100 text-blue-700'
+                      : extractedInfo.fileType === 'md'
+                      ? 'bg-amber-100 text-amber-800'
                       : 'bg-slate-200 text-slate-700'
                   }`}>
                     {extractedInfo.fileType}
@@ -597,7 +611,7 @@ export default function CreateExamPage() {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                    accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
                     onChange={e => {
                       if (e.target.files && e.target.files.length > 0) {
                         handleProcessFile(e.target.files[0]);
@@ -627,7 +641,7 @@ export default function CreateExamPage() {
                         Kéo thả file Đề thi vào đây
                       </h3>
                       <p className="mt-1 text-xs text-gray-500 max-w-sm leading-relaxed">
-                        Hỗ trợ định dạng <strong>PDF (.pdf)</strong> không giới hạn dung lượng, <strong>Word (.docx)</strong> hoặc <strong>Text (.txt)</strong>.
+                        Hỗ trợ định dạng <strong>PDF (.pdf)</strong>, <strong>Word (.docx)</strong>, <strong>Markdown (.md)</strong> hoặc <strong>Text (.txt)</strong>.
                         Tự động nhận diện câu hỏi trắc nghiệm, đúng/sai, trả lời ngắn và công thức KaTeX.
                       </p>
 
@@ -639,6 +653,10 @@ export default function CreateExamPage() {
                         <span className="inline-flex items-center gap-1 rounded-lg bg-blue-50 border border-blue-200 px-2.5 py-1 text-xs font-bold text-blue-700">
                           <FileText className="h-3.5 w-3.5" />
                           Word (.docx)
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-1 text-xs font-bold text-amber-700">
+                          <FileCode className="h-3.5 w-3.5" />
+                          Markdown (.md)
                         </span>
                         <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 border border-slate-200 px-2.5 py-1 text-xs font-bold text-slate-700">
                           <FileCode className="h-3.5 w-3.5" />
