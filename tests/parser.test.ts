@@ -80,6 +80,34 @@ D. TypeScript
     expect(exam.questions[2].correctAnswer).toBe('D');
   });
 
+  it('parses questions containing data tables without corrupting options', () => {
+    const rawExam = `
+Câu 3: Xét cân bằng sau: H2(g) + I2(g) <=> 2HI(g). Nồng độ các chất trong cân bằng và Kc phụ thuộc vào nhiệt độ thể hiện trong bảng sau:
+
+| Nhiệt độ (°C) | [H2] (mol/L) | [I2] (mol/L) | [HI] (mol/L) | Kc |
+| :--- | :--- | :--- | :--- | :--- |
+| 25 | 0,0355 | 0,0388 | 0,9220 | 50 |
+| 340 | 0,0380 | 0,0455 | 0,3870 | 9,6 |
+
+A. Giá trị Kc giảm khi nhiệt độ tăng
+B. Nồng độ HI lớn nhất ở 340 độ C
+C. Phản ứng thuận là phản ứng thu nhiệt
+*D. Ở 25 độ C phản ứng đạt hiệu suất cao hơn
+    `.trim();
+
+    const exam = parseExamText(rawExam);
+
+    expect(exam.questions).toHaveLength(1);
+    const q = exam.questions[0];
+    expect(q.type).toBe('multiple_choice');
+    expect(q.content).toContain('| Nhiệt độ (°C) | [$\\text{H_2}$] (mol/L) | [I2] (mol/L) | [HI] (mol/L) | Kc |');
+    expect(q.content).toContain('| 25 | 0,0355 | 0,0388 | 0,9220 | 50 |');
+    expect(q.options).toHaveLength(4);
+    expect(q.options[0].key).toBe('A');
+    expect(q.options[0].content).toBe('Giá trị Kc giảm khi nhiệt độ tăng');
+    expect(q.correctAnswer).toBe('D');
+  });
+
   it('parses Part II: True / False questions with a/b/c/d sub-items', () => {
     const rawExam = `
 Câu 1: Cho hàm số $y = f(x) = x^3 - 3x$. Các mệnh đề sau đúng hay sai?

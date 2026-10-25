@@ -16,6 +16,8 @@ import {
   HelpCircle,
   ChevronDown,
   Sparkles,
+  Table,
+  Sigma,
 } from 'lucide-react';
 
 interface QuestionEditorCardProps {
@@ -215,9 +217,36 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
 
       {/* Question Content Editor */}
       <div className="mb-4">
-        <label className="block text-xs font-semibold text-gray-700 mb-1">
-          Nội dung câu hỏi:
-        </label>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="block text-xs font-semibold text-gray-700">
+            Nội dung câu hỏi:
+          </label>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                const tableSnippet = '\n\n| Nhiệt độ (°C) | [H2] (mol/L) | [I2] (mol/L) | [HI] (mol/L) | Kc |\n| :--- | :--- | :--- | :--- | :--- |\n| 25 | 0,0355 | 0,0388 | 0,9220 | 50 |\n| 340 | 0,0380 | 0,0455 | 0,3870 | 9,6 |\n';
+                handleContentChange((question.content || '') + tableSnippet);
+              }}
+              className="rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 transition flex items-center gap-1 cursor-pointer"
+              title="Chèn bảng số liệu vào nội dung câu hỏi"
+            >
+              <Table className="h-3 w-3" />
+              <span>+ Bảng số liệu</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                handleContentChange((question.content || '') + ' $x^2 + 1 = 0$ ');
+              }}
+              className="rounded-md bg-amber-50 border border-amber-200 px-2 py-0.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-100 transition flex items-center gap-1 cursor-pointer"
+              title="Chèn công thức toán KaTeX"
+            >
+              <Sigma className="h-3 w-3" />
+              <span>+ Công thức</span>
+            </button>
+          </div>
+        </div>
         <textarea
           rows={3}
           value={question.content}

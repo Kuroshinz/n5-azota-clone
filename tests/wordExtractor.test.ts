@@ -34,12 +34,36 @@ describe('wordExtractor: convertDocxHtmlToExamText', () => {
     expect(result.text).toContain('x^{2}');
   });
 
-  it('handles tables and cleans non-breaking spaces', () => {
-    const html = '<p>Bảng&nbsp;đáp&nbsp;án:</p><table><tr><td>1</td><td>A</td></tr><tr><td>2</td><td>B</td></tr></table>';
+  it('converts Word HTML tables into structured Markdown tables', () => {
+    const html = `
+      <p>Câu 3. Số liệu thực nghiệm:</p>
+      <table>
+        <tr>
+          <td><p>Nhiệt độ (°C)</p></td>
+          <td><p>[H<sub>2</sub>] (mol/L)</p></td>
+          <td><p>Kc</p></td>
+        </tr>
+        <tr>
+          <td><p>25</p></td>
+          <td><p>0,0355</p></td>
+          <td><p>50</p></td>
+        </tr>
+        <tr>
+          <td><p>340</p></td>
+          <td><p>0,0380</p></td>
+          <td><p>9,6</p></td>
+        </tr>
+      </table>
+      <p>A. 25 độ C</p>
+      <p>B. 340 độ C</p>
+    `;
     const result = convertDocxHtmlToExamText(html);
-    expect(result.text).toContain('Bảng đáp án:');
-    expect(result.text).toContain('1 A');
-    expect(result.text).toContain('2 B');
+    expect(result.text).toContain('| Nhiệt độ (°C) | [H_{2}] (mol/L) | Kc |');
+    expect(result.text).toContain('| :--- | :--- | :--- |');
+    expect(result.text).toContain('| 25 | 0,0355 | 50 |');
+    expect(result.text).toContain('| 340 | 0,0380 | 9,6 |');
+    expect(result.text).toContain('A. 25 độ C');
+    expect(result.text).toContain('B. 340 độ C');
   });
 });
 

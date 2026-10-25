@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React from 'react';
 import katex from 'katex';
 import { convertWmfToSvg } from '../parser/wmfConverter';
 
@@ -9,7 +9,82 @@ interface MathViewProps {
   className?: string;
 }
 
-export const MathView: React.FC<MathViewProps> = ({ content, className = '' }) => {
+interface TableSegment {
+  type: 'table';
+  headers: string[][];
+  rows: string[][];
+}
+
+interface TextSegment {
+  type: 'text';
+  value: string;
+}
+
+type ContentSegment = TableSegment | TextSegment;
+
+/**
+ * Splits raw content into text blocks and Markdown table blocks.
+ * A Markdown table has at least a header row, a delimiter row (|:---|:---|), and optional data rows.
+ */
+function parseMarkdownTables(content: string): ContentSegment[] {
+  if (!content || !content.includes('|')) {
+    return [{ type: 'text', value: content }];
+  }
+
+  // Matches consecutive lines starting and ending with pipe |
+  const tableRegex = /((?:^[ \t]*\|[^\n]+\|[ \t]*(?:\r?\n|$)){2,})/gm;
+  const segments: ContentSegment[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = tableRegex.exec(content)) !== null) {
+    const tableBlock = match[1];
+    const matchStart = match.index;
+    const matchEnd = matchStart + tableBlock.length;
+
+    const lines = tableBlock
+      .trim()
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    // Check for the delimiter row (e.g. |:---|:---:|---:|)
+    const sepIndex = lines.findIndex((l) => /^\|(?:\s*:?-+:?\s*\|)+$/.test(l));
+
+    if (sepIndex !== -1 && lines.length >= 2) {
+      if (matchStart > lastIndex) {
+        segments.push({ type: 'text', value: content.slice(lastIndex, matchStart) });
+      }
+
+      const headerRows = lines.slice(0, sepIndex);
+      const dataRows = lines.slice(sepIndex + 1);
+
+      const parseRow = (line: string): string[] => {
+        const clean = line.replace(/^\|/, '').replace(/\|$/, '');
+        return clean.split('|').map((c) => c.trim().replace(/\\\|/g, '|'));
+      };
+
+      segments.push({
+        type: 'table',
+        headers: headerRows.map(parseRow),
+        rows: dataRows.map(parseRow),
+      });
+
+      lastIndex = matchEnd;
+    }
+  }
+
+  if (lastIndex < content.length) {
+    segments.push({ type: 'text', value: content.slice(lastIndex) });
+  }
+
+  return segments;
+}
+
+/**
+ * Renders inline/display KaTeX math formulas and embedded markdown images.
+ */
+const MathViewContent: React.FC<{ content: string }> = ({ content }) => {
   if (!content) return null;
 
   // Split by markdown images: ![alt](src)
@@ -17,7 +92,7 @@ export const MathView: React.FC<MathViewProps> = ({ content, className = '' }) =
   const imageParts = content.split(imageRegex);
 
   return (
-    <span className={`inline ${className}`}>
+    <>
       {imageParts.map((imgPart, imgIndex) => {
         const imgMatch = imgPart.match(/^!\[(.*?)\]\((.*?)\)$/);
         if (imgMatch) {
@@ -98,6 +173,82 @@ export const MathView: React.FC<MathViewProps> = ({ content, className = '' }) =
           </React.Fragment>
         );
       })}
-    </span>
+    </>
+  );
+};
+
+export const MathView: React.FC<MathViewProps> = ({ content, className = '' }) => {
+  if (!content) return null;
+
+  const segments = parseMarkdownTables(content);
+
+  // If no tables are detected, render directly using inline MathViewContent
+  if (segments.length === 1 && segments[0].type === 'text') {
+    return (
+      <span className={`inline ${className}`}>
+        <MathViewContent content={content} />
+      </span>
+    );
+  }
+
+  // Render multi-part content with structured Markdown tables
+  return (
+    <div className={`space-y-2 ${className}`}>
+      {segments.map((segment, sIdx) => {
+        if (segment.type === 'text') {
+          return (
+            <div key={sIdx} className="inline leading-relaxed">
+              <MathViewContent content={segment.value} />
+            </div>
+          );
+        }
+
+        // Render responsive, styled data table
+        return (
+          <div
+            key={sIdx}
+            className="my-3 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-xs max-w-full"
+          >
+            <table className="min-w-full divide-y divide-slate-200 text-sm text-slate-800 border-collapse">
+              {segment.headers.length > 0 && (
+                <thead className="bg-slate-100 font-semibold text-slate-800">
+                  {segment.headers.map((hRow, rIdx) => (
+                    <tr key={rIdx} className="divide-x divide-slate-200">
+                      {hRow.map((cell, cIdx) => (
+                        <th
+                          key={cIdx}
+                          className="px-3.5 py-2.5 text-center font-bold text-slate-800 whitespace-normal bg-slate-100"
+                        >
+                          <MathViewContent content={cell} />
+                        </th>
+                      ))}
+                    </tr>
+                  ))}
+                </thead>
+              )}
+              <tbody className="divide-y divide-slate-200 bg-white">
+                {segment.rows.map((row, rIdx) => (
+                  <tr
+                    key={rIdx}
+                    className={`divide-x divide-slate-200 transition-colors ${
+                      rIdx % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'
+                    } hover:bg-indigo-50/40`}
+                  >
+                    {row.map((cell, cIdx) => (
+                      <td
+                        key={cIdx}
+                        className="px-3.5 py-2 text-center text-slate-700 whitespace-normal"
+                      >
+                        <MathViewContent content={cell} />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+    </div>
   );
 };

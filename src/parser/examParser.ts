@@ -96,6 +96,15 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
   const totalQuestions = validBlocks.length;
   const questionScores = distributeExamScores(totalQuestions, 10);
 
+  // Helper to test if a match is inside a markdown table row
+  const isInsideMarkdownTable = (src: string, index: number) => {
+    const lineStart = src.lastIndexOf('\n', index) + 1;
+    let lineEnd = src.indexOf('\n', index);
+    if (lineEnd === -1) lineEnd = src.length;
+    const line = src.slice(lineStart, lineEnd).trim();
+    return line.startsWith('|') && line.endsWith('|');
+  };
+
   // Step 4: Parse each question block
   const questions: Question[] = validBlocks.map((block, index) => {
     let blockContent = block.rawText;
@@ -132,6 +141,7 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
     let subMatch: RegExpExecArray | null;
 
     while ((subMatch = subItemRegex.exec(blockContent)) !== null) {
+      if (isInsideMarkdownTable(blockContent, subMatch.index)) continue;
       subMatches.push({
         index: subMatch.index,
         length: subMatch[0].length,
@@ -145,6 +155,7 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
     let optMatch: RegExpExecArray | null;
 
     while ((optMatch = optionRegex.exec(blockContent)) !== null) {
+      if (isInsideMarkdownTable(blockContent, optMatch.index)) continue;
       optionMatches.push({
         index: optMatch.index,
         length: optMatch[0].length,

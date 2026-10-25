@@ -43,6 +43,7 @@ import {
   ListOrdered,
   Eye,
   Columns,
+  Table,
 } from 'lucide-react';
 
 const SAMPLE_TEMPLATE = `ĐỀ THI MINH HỌA CHUẨN GDPT 2018
@@ -288,7 +289,7 @@ export default function CreateExamPage() {
     setRawText(updated);
   };
 
-  const handleInsertTemplate = (type: 'mc' | 'tf' | 'sa' | 'math' | 'table') => {
+  const handleInsertTemplate = (type: 'mc' | 'tf' | 'sa' | 'math' | 'table' | 'data-table') => {
     const nextNum = parsedExam.questions.length + 1;
     let snippet = '';
 
@@ -302,6 +303,8 @@ export default function CreateExamPage() {
       snippet = ` $f(x) = \\int_0^1 \\sqrt{x^2 + 1} dx$ `;
     } else if (type === 'table') {
       snippet = `\n\nBẢNG ĐÁP ÁN:\n1. A   2. B   3. C   4. D   5. A\n6. B   7. C   8. D   9. A   10. B\n`;
+    } else if (type === 'data-table') {
+      snippet = `\n\n| Nhiệt độ (°C) | [H2] (mol/L) | [I2] (mol/L) | [HI] (mol/L) | Kc |\n| :--- | :--- | :--- | :--- | :--- |\n| 25 | 0,0355 | 0,0388 | 0,9220 | 50 |\n| 340 | 0,0380 | 0,0455 | 0,3870 | 9,6 |\n| 445 | 0,0485 | 0,0468 | 0,3540 | 50 |\n`;
     }
 
     setRawText(prev => prev + snippet);
@@ -663,6 +666,15 @@ export default function CreateExamPage() {
                         title="Chèn mẫu trả lời ngắn"
                       >
                         + Điền đáp số
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleInsertTemplate('data-table')}
+                        className="rounded-lg bg-emerald-50 border border-emerald-200 px-2 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 transition flex items-center gap-1 cursor-pointer"
+                        title="Chèn bảng số liệu (vật lý, hóa học, toán học)"
+                      >
+                        <Table className="h-3 w-3" />
+                        <span>Bảng số liệu</span>
                       </button>
                       <button
                         type="button"

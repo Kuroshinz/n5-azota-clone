@@ -19,6 +19,12 @@ export function normalizeInlineChoices(text: string): string {
   return text
     .split(/\r?\n/)
     .map((line) => {
+      // If the line is part of a markdown table, do not split it
+      const trimmed = line.trim();
+      if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+        return line;
+      }
+
       // Split on tabs or 2+ spaces if followed by an option indicator like B., C., D. or *B., *C.
       return line
         .replace(/(?:\t+|\s{2,})(\*?[A-D][.:\)])(?=\s+)/g, '\n$1')
@@ -28,8 +34,68 @@ export function normalizeInlineChoices(text: string): string {
 }
 
 /**
+ * Converts HTML tables (exported by Mammoth from Word .docx) into well-structured Markdown tables.
+ * This preserves rows and columns rather than flattening them into one vertical list.
+ */
+export function convertHtmlTablesToMarkdown(html: string): string {
+  if (!html.includes('<table')) return html;
+
+  return html.replace(/<table[^>]*>([\s\S]*?)<\/table>/gi, (_match, tableContent) => {
+    const rowMatches = tableContent.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi);
+    if (!rowMatches || rowMatches.length === 0) return '';
+
+    const rows: string[][] = [];
+
+    for (const tr of rowMatches) {
+      const cellMatches = tr.match(/<(?:td|th)[^>]*>([\s\S]*?)<\/(?:td|th)>/gi);
+      if (!cellMatches) continue;
+
+      const cells = cellMatches.map((cell: string) => {
+        // Strip outer <td...> and </td>
+        let inner = cell.replace(/^<(?:td|th)[^>]*>/i, '').replace(/<\/(?:td|th)>$/i, '');
+        // Replace <br> or </p> inside cell with a space
+        inner = inner.replace(/<br\s*\/?>/gi, ' ').replace(/<\/p>/gi, ' ');
+        // Strip other HTML tags except placeholder tokens
+        inner = inner.replace(/<(?!\/?__IMG_)[^>]+>/g, '');
+        // Clean whitespace and escape pipes
+        inner = inner.replace(/\s+/g, ' ').trim().replace(/\|/g, '\\|');
+        return inner;
+      });
+
+      if (cells.length > 0) {
+        rows.push(cells);
+      }
+    }
+
+    if (rows.length === 0) return '';
+
+    const maxCols = Math.max(...rows.map((r) => r.length));
+    if (maxCols === 0) return '';
+
+    const paddedRows = rows.map((r) => {
+      const row = [...r];
+      while (row.length < maxCols) row.push('');
+      return row;
+    });
+
+    const mdLines: string[] = [];
+    // Header row
+    mdLines.push(`| ${paddedRows[0].join(' | ')} |`);
+    // Alignment / separator row
+    mdLines.push(`| ${Array(maxCols).fill(':---').join(' | ')} |`);
+
+    // Data rows
+    for (let i = 1; i < paddedRows.length; i++) {
+      mdLines.push(`| ${paddedRows[i].join(' | ')} |`);
+    }
+
+    return `\n\n${mdLines.join('\n')}\n\n`;
+  });
+}
+
+/**
  * Converts HTML exported from Mammoth into structured exam text suitable for parseExamText.
- * Handles subscripts, superscripts, and prevents inline images from breaking option lines.
+ * Handles subscripts, superscripts, tables, and prevents inline images from breaking option lines.
  */
 export function convertDocxHtmlToExamText(html: string): { text: string; imageCount: number } {
   let imageCount = 0;
@@ -56,24 +122,27 @@ export function convertDocxHtmlToExamText(html: string): { text: string; imageCo
     return ` __IMG_INLINE_${idx}__ `;
   });
 
-  // 4. Replace paragraphs and line breaks
+  // 4. Convert HTML tables to Markdown tables BEFORE stripping paragraphs/tags
+  converted = convertHtmlTablesToMarkdown(converted);
+
+  // 5. Replace paragraphs and line breaks outside tables
   converted = converted.replace(/<\/p>/gi, '\n');
   converted = converted.replace(/<br\s*\/?>/gi, '\n');
   converted = converted.replace(/<\/li>/gi, '\n');
   converted = converted.replace(/<\/tr>/gi, '\n');
   converted = converted.replace(/<\/td>/gi, ' ');
 
-  // 5. Strip remaining HTML tags safely without affecting image URLs
+  // 6. Strip remaining HTML tags safely without affecting image URLs
   let plainText = converted.replace(/<[^>]+>/g, '');
 
-  // 6. Restore image placeholders
+  // 7. Restore image placeholders
   imagePlaceholders.forEach((imgMarkdown, idx) => {
     plainText = plainText
       .replace(new RegExp(`__IMG_BLOCK_${idx}__`, 'g'), imgMarkdown)
       .replace(new RegExp(`__IMG_INLINE_${idx}__`, 'g'), imgMarkdown);
   });
 
-  // 7. Decode common HTML entities
+  // 8. Decode common HTML entities
   plainText = plainText
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
@@ -82,10 +151,10 @@ export function convertDocxHtmlToExamText(html: string): { text: string; imageCo
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'");
 
-  // 8. Normalize inline choices split by tabs or spaces
+  // 9. Normalize inline choices split by tabs or spaces
   plainText = normalizeInlineChoices(plainText);
 
-  // 9. Run universal math and science formula normalizer
+  // 10. Run universal math and science formula normalizer
   plainText = normalizeMathFormulas(plainText);
 
   return {
