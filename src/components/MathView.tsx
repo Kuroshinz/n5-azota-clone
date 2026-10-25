@@ -1,7 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import katex from 'katex';
+import { convertWmfToSvg } from '../parser/wmfConverter';
 
 interface MathViewProps {
   content: string;
@@ -16,18 +17,41 @@ export const MathView: React.FC<MathViewProps> = ({ content, className = '' }) =
   const imageParts = content.split(imageRegex);
 
   return (
-    <span className={`inline-block ${className}`}>
+    <span className={`inline ${className}`}>
       {imageParts.map((imgPart, imgIndex) => {
         const imgMatch = imgPart.match(/^!\[(.*?)\]\((.*?)\)$/);
         if (imgMatch) {
           const alt = imgMatch[1] || 'Hình vẽ';
-          const src = imgMatch[2];
+          let src = imgMatch[2];
+
+          // Auto-convert legacy WMF/EMF images to native browser SVG on the fly
+          if (
+            src.startsWith('data:image/x-wmf;base64,') ||
+            src.startsWith('data:image/x-emf;base64,') ||
+            src.startsWith('data:image/wmf;base64,')
+          ) {
+            try {
+              const base64Data = src.split(',')[1];
+              if (typeof window !== 'undefined') {
+                const binaryStr = window.atob(base64Data);
+                const bytes = new Uint8Array(binaryStr.length);
+                for (let i = 0; i < binaryStr.length; i++) {
+                  bytes[i] = binaryStr.charCodeAt(i);
+                }
+                const converted = convertWmfToSvg(bytes);
+                src = converted.dataUrl;
+              }
+            } catch (err) {
+              console.warn('On-the-fly WMF conversion error in MathView:', err);
+            }
+          }
+
           return (
             <img
               key={imgIndex}
               src={src}
               alt={alt}
-              className="my-3 block max-h-80 max-w-full rounded-xl border border-gray-200 shadow-sm object-contain bg-white"
+              className="my-1 inline-block max-h-72 max-w-full rounded-lg border border-gray-100 shadow-xs object-contain bg-white align-middle"
             />
           );
         }
@@ -51,7 +75,7 @@ export const MathView: React.FC<MathViewProps> = ({ content, className = '' }) =
                     />
                   );
                 } catch {
-                  return <span key={index} className="text-red-500">{part}</span>;
+                  return <span key={index} className="font-mono text-sm text-gray-800">{part}</span>;
                 }
               } else if (part.startsWith('$') && part.endsWith('$')) {
                 const formula = part.slice(1, -1).trim();
@@ -60,12 +84,12 @@ export const MathView: React.FC<MathViewProps> = ({ content, className = '' }) =
                   return (
                     <span
                       key={index}
-                      className="inline-block px-0.5"
+                      className="inline-block px-0.5 align-middle"
                       dangerouslySetInnerHTML={{ __html: html }}
                     />
                   );
                 } catch {
-                  return <span key={index} className="text-red-500">{part}</span>;
+                  return <span key={index} className="font-mono text-sm text-gray-800">{part}</span>;
                 }
               } else {
                 return <React.Fragment key={index}>{part}</React.Fragment>;

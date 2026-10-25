@@ -15,6 +15,7 @@ import {
   ListOrdered,
   HelpCircle,
   ChevronDown,
+  Sparkles,
 } from 'lucide-react';
 
 interface QuestionEditorCardProps {
@@ -25,7 +26,6 @@ interface QuestionEditorCardProps {
 }
 
 const OPTION_KEYS: OptionKey[] = ['A', 'B', 'C', 'D'];
-const SUB_KEYS: Array<'a' | 'b' | 'c' | 'd'> = ['a', 'b', 'c', 'd'];
 
 export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
   question,
@@ -98,13 +98,13 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
   const handleDeleteOption = (index: number) => {
     const nextOptions = (question.options || []).filter((_, idx) => idx !== index);
     let nextCorrect = question.correctAnswer;
-    if (nextCorrect && !nextOptions.some(o => o.key === nextCorrect)) {
-      nextCorrect = nextOptions[0]?.key;
+    if (question.correctAnswer === question.options?.[index]?.key) {
+      nextCorrect = nextOptions[0]?.key || 'A';
     }
     onChange({ ...question, options: nextOptions, correctAnswer: nextCorrect });
   };
 
-  // True/False SubItems Handlers
+  // True / False Handlers
   const handleSubItemContentChange = (index: number, content: string) => {
     const nextSubItems = [...(question.subItems || [])];
     if (nextSubItems[index]) {
@@ -113,10 +113,10 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
     }
   };
 
-  const handleSubItemCorrectChange = (index: number, isCorrect: boolean) => {
+  const handleSubItemCorrectChange = (index: number, val: boolean) => {
     const nextSubItems = [...(question.subItems || [])];
     if (nextSubItems[index]) {
-      nextSubItems[index] = { ...nextSubItems[index], correctAnswer: isCorrect };
+      nextSubItems[index] = { ...nextSubItems[index], correctAnswer: val };
       onChange({ ...question, subItems: nextSubItems });
     }
   };
@@ -124,7 +124,8 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
   const handleAddSubItem = () => {
     const nextSubItems = [...(question.subItems || [])];
     if (nextSubItems.length >= 4) return;
-    const nextKey = SUB_KEYS[nextSubItems.length] || 'd';
+    const keys: Array<'a' | 'b' | 'c' | 'd'> = ['a', 'b', 'c', 'd'];
+    const nextKey = keys[nextSubItems.length] || 'd';
     nextSubItems.push({ key: nextKey, content: '', correctAnswer: true });
     onChange({ ...question, subItems: nextSubItems });
   };
@@ -135,17 +136,23 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
   };
 
   // Short Answer Handlers
-  const handleAcceptedAnswersChange = (answersText: string) => {
-    const parts = answersText.split(',').map(s => s.trim()).filter(Boolean);
+  const handleAcceptedAnswersChange = (raw: string) => {
+    const parts = raw.split(',').map((s) => s.trim()).filter(Boolean);
     onChange({ ...question, acceptedAnswers: parts });
+  };
+
+  const hasFormulaSyntax = (str: string) => {
+    if (!str) return false;
+    return str.includes('$') || str.includes('\\') || str.includes('![Hình vẽ]') || str.includes('data:image');
   };
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition hover:shadow-md">
-      {/* Top Bar: Question Number, Type Selector, Score, Actions */}
+      {/* Top Bar */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
         <div className="flex items-center gap-2">
-          <span className="flex h-7 px-3 items-center justify-center rounded-lg bg-indigo-600 text-xs font-bold text-white shadow-sm">
+          {/* Question Number Badge */}
+          <span className="flex h-7 min-w-7 items-center justify-center rounded-lg bg-indigo-600 px-2 text-xs font-bold text-white shadow-xs">
             Câu {displayNumber}
           </span>
 
@@ -170,7 +177,7 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
             <span className="font-medium">Điểm:</span>
             <input
               type="number"
-              step="0.1"
+              step="0.05"
               min="0"
               value={question.score ?? 0.25}
               onChange={(e) => handleScoreChange(parseFloat(e.target.value) || 0)}
@@ -182,7 +189,7 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
           <button
             type="button"
             onClick={() => setShowPreview(!showPreview)}
-            className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
+            className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition cursor-pointer ${
               showPreview
                 ? 'bg-indigo-100 text-indigo-700 font-bold'
                 : 'text-gray-500 hover:bg-gray-100'
@@ -197,7 +204,7 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
           <button
             type="button"
             onClick={onDelete}
-            className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 transition"
+            className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 transition cursor-pointer"
             title="Xóa câu hỏi này"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -222,7 +229,7 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
         {showPreview && question.content && (
           <div className="mt-2 rounded-xl bg-slate-50 p-3 border border-slate-200 text-sm">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide block mb-1">
-              Xem trước hiển thị:
+              Xem trước câu hỏi:
             </span>
             <MathView content={question.content} />
           </div>
@@ -241,7 +248,7 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
               <button
                 type="button"
                 onClick={handleAddOption}
-                className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition"
+                className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Thêm phương án</span>
@@ -252,53 +259,68 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {(question.options || []).map((opt, idx) => {
               const isCorrect = question.correctAnswer === opt.key;
+              const hasFormula = hasFormulaSyntax(opt.content);
 
               return (
                 <div
                   key={opt.key}
-                  className={`flex items-center gap-2 rounded-xl border p-2 transition ${
+                  className={`flex flex-col rounded-xl border p-2.5 transition ${
                     isCorrect
-                      ? 'border-emerald-500 bg-emerald-50/50 shadow-sm'
+                      ? 'border-emerald-500 bg-emerald-50/40 shadow-sm'
                       : 'border-gray-200 bg-white hover:border-gray-300'
                   }`}
                 >
-                  {/* Clickable Badge to set Correct Answer */}
-                  <button
-                    type="button"
-                    onClick={() => handleSetCorrectAnswer(opt.key)}
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold transition ${
-                      isCorrect
-                        ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                    title={isCorrect ? 'Đáp án đúng (Click để đổi)' : 'Click để chọn làm đáp án đúng'}
-                  >
-                    {opt.key}
-                  </button>
-
-                  <input
-                    type="text"
-                    value={opt.content}
-                    onChange={(e) => handleOptionContentChange(idx, e.target.value)}
-                    placeholder={`Nội dung đáp án ${opt.key}...`}
-                    className="flex-1 bg-transparent text-sm text-gray-800 focus:outline-none"
-                  />
-
-                  {isCorrect && (
-                    <span className="text-[11px] font-bold text-emerald-700 shrink-0 flex items-center gap-0.5">
-                      <Check className="h-3 w-3" /> Đúng
-                    </span>
-                  )}
-
-                  {(question.options?.length ?? 0) > 2 && (
+                  <div className="flex items-center gap-2">
+                    {/* Clickable Badge to set Correct Answer */}
                     <button
                       type="button"
-                      onClick={() => handleDeleteOption(idx)}
-                      className="text-gray-400 hover:text-rose-500 transition p-1"
-                      title="Xóa phương án này"
+                      onClick={() => handleSetCorrectAnswer(opt.key)}
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold transition cursor-pointer ${
+                        isCorrect
+                          ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                      title={isCorrect ? 'Đáp án đúng (Click để đổi)' : 'Click để chọn làm đáp án đúng'}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      {opt.key}
                     </button>
+
+                    <input
+                      type="text"
+                      value={opt.content}
+                      onChange={(e) => handleOptionContentChange(idx, e.target.value)}
+                      placeholder={`Nội dung đáp án ${opt.key}...`}
+                      className="flex-1 bg-transparent text-sm text-gray-800 focus:outline-none"
+                    />
+
+                    {isCorrect && (
+                      <span className="text-[11px] font-bold text-emerald-700 shrink-0 flex items-center gap-0.5">
+                        <Check className="h-3 w-3" /> Đúng
+                      </span>
+                    )}
+
+                    {(question.options?.length ?? 0) > 2 && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteOption(idx)}
+                        className="text-gray-400 hover:text-rose-500 transition p-1 cursor-pointer"
+                        title="Xóa phương án này"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Inline Live Formula Preview for options */}
+                  {(showPreview || hasFormula) && opt.content.trim() && (
+                    <div className="mt-2 border-t border-gray-100/80 pt-1.5 pl-10 text-xs text-gray-800 flex items-center gap-1.5">
+                      <span className="rounded bg-slate-100 px-1 py-0.2 text-[10px] font-bold text-slate-500">
+                        Hiển thị
+                      </span>
+                      <div className="inline-block overflow-x-auto">
+                        <MathView content={opt.content} />
+                      </div>
+                    </div>
                   )}
                 </div>
               );
@@ -318,7 +340,7 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
               <button
                 type="button"
                 onClick={handleAddSubItem}
-                className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition"
+                className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Thêm ý</span>
@@ -328,58 +350,71 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
 
           <div className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white overflow-hidden">
             {(question.subItems || []).map((item, idx) => (
-              <div key={item.key} className="flex items-center gap-3 p-3 hover:bg-slate-50/50 transition">
-                <span className="font-bold text-indigo-700 text-sm shrink-0">
-                  {item.key})
-                </span>
+              <div key={item.key} className="flex flex-col p-3 hover:bg-slate-50/50 transition">
+                <div className="flex items-center gap-3">
+                  <span className="font-bold text-indigo-700 text-sm shrink-0">
+                    {item.key})
+                  </span>
 
-                <input
-                  type="text"
-                  value={item.content}
-                  onChange={(e) => handleSubItemContentChange(idx, e.target.value)}
-                  placeholder={`Nội dung khẳng định ý ${item.key}...`}
-                  className="flex-1 text-sm text-gray-800 bg-transparent focus:outline-none"
-                />
+                  <input
+                    type="text"
+                    value={item.content}
+                    onChange={(e) => handleSubItemContentChange(idx, e.target.value)}
+                    placeholder={`Nội dung khẳng định ý ${item.key}...`}
+                    className="flex-1 text-sm text-gray-800 bg-transparent focus:outline-none"
+                  />
 
-                {/* Đúng / Sai Toggle Buttons */}
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => handleSubItemCorrectChange(idx, true)}
-                    className={`rounded-lg px-2.5 py-1 text-xs font-bold transition flex items-center gap-1 ${
-                      item.correctAnswer === true
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                    }`}
-                  >
-                    <Check className="h-3 w-3" />
-                    <span>Đúng</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleSubItemCorrectChange(idx, false)}
-                    className={`rounded-lg px-2.5 py-1 text-xs font-bold transition flex items-center gap-1 ${
-                      item.correctAnswer === false
-                        ? 'bg-rose-600 text-white shadow-sm'
-                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                    }`}
-                  >
-                    <X className="h-3 w-3" />
-                    <span>Sai</span>
-                  </button>
-
-                  {(question.subItems?.length ?? 0) > 1 && (
+                  {/* Đúng / Sai Toggle Buttons */}
+                  <div className="flex items-center gap-1 shrink-0">
                     <button
                       type="button"
-                      onClick={() => handleDeleteSubItem(idx)}
-                      className="text-gray-400 hover:text-rose-500 transition p-1 ml-1"
-                      title="Xóa ý này"
+                      onClick={() => handleSubItemCorrectChange(idx, true)}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                        item.correctAnswer === true
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                      }`}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Check className="h-3 w-3" />
+                      <span>Đúng</span>
                     </button>
-                  )}
+
+                    <button
+                      type="button"
+                      onClick={() => handleSubItemCorrectChange(idx, false)}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                        item.correctAnswer === false
+                          ? 'bg-rose-600 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                      }`}
+                    >
+                      <X className="h-3 w-3" />
+                      <span>Sai</span>
+                    </button>
+
+                    {(question.subItems?.length ?? 0) > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSubItem(idx)}
+                        className="text-gray-400 hover:text-rose-500 transition p-1 ml-1 cursor-pointer"
+                        title="Xóa ý này"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {(showPreview || hasFormulaSyntax(item.content)) && item.content.trim() && (
+                  <div className="mt-2 border-t border-gray-100/80 pt-1.5 pl-6 text-xs text-gray-800 flex items-center gap-1.5">
+                    <span className="rounded bg-slate-100 px-1 py-0.2 text-[10px] font-bold text-slate-500">
+                      Hiển thị
+                    </span>
+                    <div className="inline-block overflow-x-auto">
+                      <MathView content={item.content} />
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -417,6 +452,15 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
           placeholder="Nhập lời giải hoặc hướng dẫn chi tiết..."
           className="w-full rounded-xl border border-gray-200 p-2.5 text-xs text-gray-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-normal leading-relaxed"
         />
+
+        {showPreview && question.explanation && (
+          <div className="mt-2 rounded-xl bg-slate-50 p-2.5 border border-slate-200 text-xs">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block mb-1">
+              Xem trước lời giải:
+            </span>
+            <MathView content={question.explanation} />
+          </div>
+        )}
       </div>
     </div>
   );
