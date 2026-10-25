@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { convertDocxHtmlToExamText } from '../src/parser/wordExtractor';
+import JSZip from 'jszip';
+import { convertDocxHtmlToExamText, extractTextAndImagesFromDocx } from '../src/parser/wordExtractor';
 import { preprocessWordXmlOmml } from '../src/parser/ommlConverter';
 import { convertWmfToSvg } from '../src/parser/wmfConverter';
 import { normalizeMathFormulas } from '../src/parser/mathConverter';
@@ -64,6 +65,32 @@ describe('wordExtractor: convertDocxHtmlToExamText', () => {
     expect(result.text).toContain('| 340 | 0,0380 | 9,6 |');
     expect(result.text).toContain('A. 25 độ C');
     expect(result.text).toContain('B. 340 độ C');
+  });
+});
+
+describe('wordExtractor: extractTextAndImagesFromDocx', () => {
+  it('extracts from ArrayBuffer (browser format) and Buffer (Node format) without "Could not find file in options" error', async () => {
+    const zip = new JSZip();
+    zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+    zip.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+    zip.file('word/document.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Câu 1: Thử nghiệm bóc tách Word</w:t></w:r></w:p><w:p><w:r><w:t>A. Đúng</w:t></w:r></w:p></w:body></w:document>');
+
+    const arrayBuffer = await zip.generateAsync({ type: 'arraybuffer' });
+    const nodeBuffer = Buffer.from(arrayBuffer);
+    const uint8Array = new Uint8Array(arrayBuffer);
+
+    // 1. ArrayBuffer (how browser sends it from file.arrayBuffer())
+    const resArr = await extractTextAndImagesFromDocx(arrayBuffer);
+    expect(resArr.rawText).toContain('Câu 1: Thử nghiệm bóc tách Word');
+    expect(resArr.rawText).toContain('A. Đúng');
+
+    // 2. Buffer (how Node/server sends it)
+    const resBuf = await extractTextAndImagesFromDocx(nodeBuffer);
+    expect(resBuf.rawText).toContain('Câu 1: Thử nghiệm bóc tách Word');
+
+    // 3. Uint8Array
+    const resU8 = await extractTextAndImagesFromDocx(uint8Array);
+    expect(resU8.rawText).toContain('Câu 1: Thử nghiệm bóc tách Word');
   });
 });
 

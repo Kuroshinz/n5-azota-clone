@@ -232,19 +232,60 @@ export default function CreateExamPage() {
           });
         }
       }
-      // CASE 2: Word DOCX Document
+      // CASE 2: Word DOCX Document (Dual-layer: In-browser + Server fallback)
       else if (ext === 'docx') {
-        setExtractProgressMessage('Đang giải nén văn bản, công thức và hình ảnh từ file Word...');
-        const buffer = await file.arrayBuffer();
-        const result = await extractTextAndImagesFromDocx(buffer);
+        setExtractProgressMessage('Đang giải nén văn bản, bảng số liệu và hình ảnh từ file Word...');
+        let docxExtracted = false;
+        let clientDocxError = '';
 
-        setRawText(result.rawText);
-        setExtractedInfo({
-          fileName: file.name,
-          fileSize: `${(file.size / 1024).toFixed(1)} KB`,
-          fileType: 'docx',
-          imageCount: result.imageCount,
-        });
+        try {
+          const buffer = await file.arrayBuffer();
+          const result = await extractTextAndImagesFromDocx(buffer);
+
+          if (result && result.rawText && result.rawText.trim().length > 0) {
+            setRawText(result.rawText);
+            setExtractedInfo({
+              fileName: file.name,
+              fileSize: `${(file.size / 1024).toFixed(1)} KB`,
+              fileType: 'docx',
+              imageCount: result.imageCount,
+            });
+            docxExtracted = true;
+          }
+        } catch (clientErr: any) {
+          console.warn('In-browser DOCX parsing encountered an issue, falling back to server route...', clientErr);
+          clientDocxError = clientErr?.message || 'Lỗi bóc tách Word trên trình duyệt';
+        }
+
+        // Automatic fallback to server-side parser route
+        if (!docxExtracted) {
+          setExtractProgressMessage('Đang kết nối máy chủ phân tích tài liệu Word...');
+          const formData = new FormData();
+          formData.append('file', file);
+
+          const res = await fetch('/api/parser/docx', {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (!res.ok) {
+            const rawResponse = await res.text();
+            throw new Error(`Không thể giải nén file Word (.docx): ${clientDocxError || rawResponse.slice(0, 120)}`);
+          }
+
+          const data = await res.json();
+          if (!data.success) {
+            throw new Error(data.error || 'Không thể trích xuất file Word');
+          }
+
+          setRawText(data.text);
+          setExtractedInfo({
+            fileName: file.name,
+            fileSize: data.fileSize || `${(file.size / 1024).toFixed(1)} KB`,
+            fileType: 'docx',
+            imageCount: data.imageCount,
+          });
+        }
       }
       // CASE 3: Plain Text File
       else if (ext === 'txt') {

@@ -167,7 +167,9 @@ export function convertDocxHtmlToExamText(html: string): { text: string; imageCo
  * Preprocesses a Word (.docx) buffer by converting Office Math (OMML) to LaTeX text runs
  * so that Mammoth produces clean mathematical formulas ($...$).
  */
-async function preprocessDocxMath(buffer: ArrayBuffer | Buffer): Promise<ArrayBuffer | Buffer> {
+async function preprocessDocxMath(
+  buffer: ArrayBuffer | Buffer | Uint8Array
+): Promise<ArrayBuffer | Buffer | Uint8Array> {
   try {
     const zip = await JSZip.loadAsync(buffer);
     const docXmlFile = zip.file('word/document.xml');
@@ -195,21 +197,45 @@ async function preprocessDocxMath(buffer: ArrayBuffer | Buffer): Promise<ArrayBu
 
 /**
  * Extracts raw text and converts embedded images (including WMF/EMF equations to SVG)
- * from a Microsoft Word (.docx) buffer.
+ * from a Microsoft Word (.docx) buffer, ArrayBuffer, or Uint8Array.
+ * Works seamlessly across both Node.js and Browser environments.
  */
 export async function extractTextAndImagesFromDocx(
-  buffer: ArrayBuffer | Buffer
+  buffer: ArrayBuffer | Buffer | Uint8Array
 ): Promise<ExtractedDocxResult> {
   let imageCount = 0;
 
   try {
     // Step 1: Preprocess OMML equations to LaTeX text
-    const processedBuffer = await preprocessDocxMath(buffer);
+    const processed = await preprocessDocxMath(buffer);
 
-    // Step 2: Configure Mammoth image conversion with WMF/EMF -> SVG support
+    // Step 2: Extract reliable ArrayBuffer and Node Buffer representations
+    let arrayBufferData: ArrayBuffer;
+    if (processed instanceof ArrayBuffer) {
+      arrayBufferData = processed;
+    } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(processed)) {
+      arrayBufferData = processed.buffer.slice(
+        processed.byteOffset,
+        processed.byteOffset + processed.byteLength
+      ) as ArrayBuffer;
+    } else if (processed instanceof Uint8Array || (processed && (processed as any).buffer instanceof ArrayBuffer)) {
+      const view = processed as Uint8Array;
+      arrayBufferData = view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as ArrayBuffer;
+    } else {
+      const u8 = new Uint8Array(processed as any);
+      arrayBufferData = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer;
+    }
+
+    let nodeBufferData: any = undefined;
+    if (typeof Buffer !== 'undefined') {
+      nodeBufferData = Buffer.isBuffer(processed)
+        ? processed
+        : Buffer.from(arrayBufferData);
+    }
+
+    // Step 3: Configure Mammoth image conversion with WMF/EMF -> SVG support
     const imageHandler = async (element: any) => {
       imageCount++;
-      const bufferData = await element.read();
       const contentType = (element.contentType || '').toLowerCase();
 
       // Check if the image is a Windows Metafile (MathType equation or vector diagram)
@@ -220,6 +246,7 @@ export async function extractTextAndImagesFromDocx(
 
       if (isWmf) {
         try {
+          const bufferData = await element.read();
           const wmfResult = convertWmfToSvg(bufferData);
           return {
             src: wmfResult.dataUrl,
@@ -230,15 +257,22 @@ export async function extractTextAndImagesFromDocx(
       }
 
       // Standard web image format (PNG, JPEG, GIF, SVG)
-      const base64 =
-        typeof Buffer !== 'undefined'
-          ? Buffer.from(bufferData).toString('base64')
-          : btoa(
-              new Uint8Array(bufferData).reduce(
-                (data, byte) => data + String.fromCharCode(byte),
-                ''
-              )
-            );
+      let base64 = '';
+      if (typeof element.readAsBase64String === 'function') {
+        base64 = await element.readAsBase64String();
+      } else {
+        const bufferData = await element.read();
+        if (typeof Buffer !== 'undefined') {
+          base64 = Buffer.from(bufferData).toString('base64');
+        } else {
+          const u8 = new Uint8Array(bufferData);
+          let binary = '';
+          for (let i = 0; i < u8.length; i++) {
+            binary += String.fromCharCode(u8[i]);
+          }
+          base64 = btoa(binary);
+        }
+      }
 
       const mimeType = contentType || 'image/png';
       return {
@@ -261,10 +295,12 @@ export async function extractTextAndImagesFromDocx(
       mammothOptions.convertImage = convertImage;
     }
 
-    const inputData: any =
-      typeof Buffer !== 'undefined'
-        ? { buffer: Buffer.isBuffer(processedBuffer) ? processedBuffer : Buffer.from(processedBuffer as ArrayBuffer) }
-        : { arrayBuffer: processedBuffer };
+    // Pass BOTH arrayBuffer and buffer so Mammoth works in both Node.js (lib/unzip.js)
+    // and Browser (browser/unzip.js) environments without "Could not find file in options" error!
+    const inputData: any = {
+      arrayBuffer: arrayBufferData,
+      ...(nodeBufferData ? { buffer: nodeBufferData } : {}),
+    };
 
     const result = await mammoth.convertToHtml(inputData, mammothOptions);
     const converted = convertDocxHtmlToExamText(result.value);
