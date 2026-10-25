@@ -31,6 +31,8 @@ import {
   Calendar,
   Home,
   LogIn,
+  LayoutGrid,
+  X,
 } from 'lucide-react';
 
 const DEFAULT_SAMPLE_EXAM: Exam = {
@@ -130,6 +132,7 @@ export default function ExamTakingPage() {
   const [timeLeftSeconds, setTimeLeftSeconds] = useState(20 * 60);
   const [showWarningModal, setShowWarningModal] = useState(false);
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
+  const [showMobileNav, setShowMobileNav] = useState(false);
 
   const isProctoringEnabled = Boolean(exam.settings?.enableProctoring);
   const maxViolations = exam.settings?.maxViolations ?? 3;
@@ -519,13 +522,13 @@ export default function ExamTakingPage() {
   return (
     <div className="min-h-screen bg-slate-100 pb-16">
       {/* Sticky Test Header */}
-      <header className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 px-6 py-3 backdrop-blur shadow-sm">
-        <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <div className="flex items-center gap-3">
+      <header className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 px-3 sm:px-6 py-2.5 sm:py-3 backdrop-blur shadow-sm">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             {!isProctoringEnabled && (
               <Link
                 href="/"
-                className="flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition"
+                className="flex items-center justify-center h-8 w-8 sm:w-auto sm:h-auto gap-1 rounded-lg border border-gray-200 bg-gray-50 sm:px-2.5 sm:py-1 text-xs font-semibold text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition shrink-0"
                 title="Quay về Trang chủ"
               >
                 <Home className="h-3.5 w-3.5" />
@@ -533,37 +536,51 @@ export default function ExamTakingPage() {
               </Link>
             )}
 
-            <div>
-              <h1 className="text-sm font-bold text-gray-900 line-clamp-1">{exam.title}</h1>
-              <p className="text-xs text-gray-500">
+            <div className="min-w-0">
+              <h1 className="text-xs sm:text-sm font-bold text-gray-900 truncate max-w-[140px] xs:max-w-[180px] sm:max-w-md">{exam.title}</h1>
+              <p className="text-[11px] sm:text-xs text-gray-500 truncate">
                 Thí sinh: <strong>{user?.fullName || studentName || 'Học sinh'}</strong>
               </p>
             </div>
 
             {/* Mode Indicator badge */}
             {isProctoringEnabled ? (
-              <span className="hidden sm:inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-[11px] font-bold text-indigo-700 border border-indigo-200">
+              <span className="hidden md:inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-[11px] font-bold text-indigo-700 border border-indigo-200">
                 <Shield className="h-3 w-3" />
                 Giám sát
               </span>
             ) : (
-              <span className="hidden sm:inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
+              <span className="hidden md:inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
                 <BookOpen className="h-3 w-3" />
                 Ôn tập tự do
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+            {/* Mobile Sheet Trigger */}
+            <button
+              type="button"
+              onClick={() => setShowMobileNav(true)}
+              className="lg:hidden flex items-center gap-1 rounded-xl border border-indigo-200 bg-indigo-50/80 px-2.5 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition active:scale-95"
+              title="Mở danh sách câu hỏi"
+            >
+              <LayoutGrid className="h-4 w-4" />
+              <span className="hidden xs:inline">Câu hỏi</span>
+              <span className="bg-indigo-600 text-white rounded-full text-[10px] px-1.5 py-0.2">
+                {Object.keys(answers).length}/{displayQuestions.length}
+              </span>
+            </button>
+
             {/* Timer Badge */}
             <div
-              className={`flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 font-mono text-sm font-bold shadow-inner ${
+              className={`flex items-center gap-1 rounded-xl px-2.5 sm:px-3.5 py-1.5 font-mono text-xs sm:text-sm font-bold shadow-inner ${
                 timeLeftSeconds < 300
                   ? 'bg-rose-50 text-rose-600 animate-pulse border border-rose-200'
                   : 'bg-indigo-50 text-indigo-700 border border-indigo-100'
               }`}
             >
-              <Clock className="h-4 w-4" />
+              <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               <span>{formatTimer(timeLeftSeconds)}</span>
             </div>
 
@@ -571,16 +588,16 @@ export default function ExamTakingPage() {
               type="button"
               disabled={isAutoSubmitting || isSubmitting}
               onClick={() => setShowConfirmSubmit(true)}
-              className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-md hover:bg-indigo-700 active:scale-95 transition disabled:opacity-50"
+              className="rounded-xl bg-indigo-600 px-3 sm:px-4 py-1.5 sm:py-2 text-xs font-bold text-white shadow-md hover:bg-indigo-700 active:scale-95 transition disabled:opacity-50 touch-manipulation cursor-pointer"
             >
-              {isSubmitting ? 'Đang nộp...' : 'Nộp bài thi'}
+              {isSubmitting ? 'Đang nộp...' : 'Nộp bài'}
             </button>
           </div>
         </div>
       </header>
 
       {/* Main Examination Layout: 2 Columns */}
-      <main className="mx-auto max-w-7xl px-6 pt-6">
+      <main className="mx-auto max-w-7xl px-3 sm:px-6 pt-4 sm:pt-6">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
           {/* Question List (3 Cols) */}
           <div className="space-y-4 lg:col-span-3">
@@ -599,7 +616,7 @@ export default function ExamTakingPage() {
           </div>
 
           {/* Navigation & Info Sidebar (1 Col) */}
-          <div className="space-y-4 lg:col-span-1">
+          <div className="hidden lg:block space-y-4 lg:col-span-1">
             <QuestionNavGrid
               questions={displayQuestions}
               answers={answers}
@@ -646,6 +663,53 @@ export default function ExamTakingPage() {
           </div>
         </div>
       </main>
+
+            {/* Mobile Bottom Sheet Drawer for Question Navigation */}
+      {showMobileNav && (
+        <div className="fixed inset-0 z-40 flex flex-col justify-end bg-black/50 backdrop-blur-xs lg:hidden animate-fade-in">
+          <div className="w-full rounded-t-2xl bg-white p-4 shadow-2xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-2">
+              <div className="flex items-center gap-2">
+                <LayoutGrid className="h-4 w-4 text-indigo-600" />
+                <span className="font-bold text-sm text-gray-900">Danh sách câu hỏi</span>
+                <span className="text-xs text-gray-500 font-medium">({Object.keys(answers).length}/{displayQuestions.length} đã làm)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMobileNav(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 py-2">
+              <QuestionNavGrid
+                questions={displayQuestions}
+                answers={answers}
+                flaggedQuestionIds={flaggedIds}
+                onSelectQuestion={(questionId) => {
+                  setShowMobileNav(false);
+                  const el = document.getElementById(`question-${questionId}`);
+                  el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Action Button for Mobile Question Grid */}
+      <div className="fixed bottom-4 right-4 z-30 lg:hidden">
+        <button
+          type="button"
+          onClick={() => setShowMobileNav(true)}
+          className="flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-3 text-xs font-bold text-white shadow-xl shadow-indigo-300 hover:bg-indigo-700 active:scale-95 transition cursor-pointer"
+        >
+          <LayoutGrid className="h-4 w-4" />
+          <span>Bảng câu ({Object.keys(answers).length}/{displayQuestions.length})</span>
+        </button>
+      </div>
 
       {/* Warning Modal for Proctoring Violations */}
       <ProctoringModal

@@ -57,7 +57,7 @@ export const QuestionNavGrid: React.FC<QuestionNavGridProps> = ({
         <span className="font-semibold text-gray-800">Bảng câu hỏi ({answeredCount}/{count})</span>
       </div>
 
-      <div className="grid grid-cols-5 gap-2 max-h-64 overflow-y-auto p-1">
+      <div className="grid grid-cols-5 gap-1.5 sm:gap-2 max-h-52 sm:max-h-64 overflow-y-auto p-1">
         {items.map(item => {
           let bg = 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200';
           if (item.isAnswered) {
@@ -74,7 +74,7 @@ export const QuestionNavGrid: React.FC<QuestionNavGridProps> = ({
               key={item.displayNumber}
               type="button"
               onClick={() => onSelectQuestion(item.questionId, item.displayNumber)}
-              className={`relative flex h-9 w-full items-center justify-center rounded-lg border text-xs font-bold transition ${bg} ${
+              className={`relative flex min-h-[40px] h-10 w-full items-center justify-center rounded-xl border text-xs sm:text-sm font-bold transition touch-manipulation cursor-pointer active:scale-95 ${bg} ${
                 item.isActive ? 'ring-2 ring-indigo-500 ring-offset-1' : ''
               }`}
             >

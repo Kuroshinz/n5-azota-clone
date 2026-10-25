@@ -40,7 +40,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
     <div
       id={`question-${question.id}`}
       data-display-num={displayNum}
-      className="scroll-mt-20 rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:shadow-md"
+      className="scroll-mt-20 rounded-xl border border-gray-200 bg-white p-3.5 sm:p-5 shadow-sm transition hover:shadow-md"
     >
       {/* Header */}
       <div className="mb-3 flex items-start justify-between">
@@ -100,7 +100,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
                 type="button"
                 disabled={readOnly}
                 onClick={() => onSelectOption?.(opt.key)}
-                className={`flex items-start gap-3 rounded-lg border p-3 text-left transition ${btnClass}`}
+                className={`flex items-start gap-3 rounded-xl border p-3 sm:p-3.5 text-left transition min-h-[44px] active:scale-[0.99] touch-manipulation cursor-pointer ${btnClass}`}
               >
                 <span
                   className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition ${
@@ -130,7 +130,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
       {qType === 'true_false' && question.subItems && question.subItems.length > 0 && (
         <div className="space-y-2.5">
           <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-            <div className="grid grid-cols-12 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-500 border-b border-gray-200">
+            <div className="hidden sm:grid grid-cols-12 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-500 border-b border-gray-200">
               <span className="col-span-8 sm:col-span-9">Mệnh đề khẳng định</span>
               <span className="col-span-4 sm:col-span-3 text-center">Lựa chọn của bạn</span>
             </div>
@@ -143,15 +143,16 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
                 const currentVal = tfAnswers[item.key];
 
                 return (
-                  <div key={item.key} className="grid grid-cols-12 items-center px-4 py-3 gap-2">
-                    <div className="col-span-8 sm:col-span-9 flex items-start gap-2.5 text-sm text-gray-800">
-                      <span className="font-bold text-indigo-700 shrink-0">{item.key})</span>
-                      <div className="flex-1">
+                  <div key={item.key} className="flex flex-col sm:grid sm:grid-cols-12 sm:items-center px-3.5 sm:px-4 py-3 gap-2.5 sm:gap-2">
+                    <div className="sm:col-span-8 md:col-span-9 flex items-start gap-2.5 text-sm text-gray-800">
+                      <span className="font-bold text-indigo-700 shrink-0 text-sm">{item.key})</span>
+                      <div className="flex-1 break-words">
                         <MathView content={item.content} />
                       </div>
                     </div>
 
-                    <div className="col-span-4 sm:col-span-3 flex items-center justify-center gap-1.5">
+                    <div className="sm:col-span-4 md:col-span-3 flex items-center justify-end sm:justify-center gap-2 pt-1 sm:pt-0 border-t sm:border-t-0 border-gray-50">
+                      <span className="text-[11px] font-medium text-gray-400 sm:hidden mr-auto">Chọn:</span>
                       <button
                         type="button"
                         disabled={readOnly}
@@ -159,13 +160,13 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
                           const next = { ...tfAnswers, [item.key]: true };
                           onSelectOption?.(next);
                         }}
-                        className={`rounded-lg px-2.5 py-1 text-xs font-bold transition flex items-center gap-1 ${
+                        className={`min-h-[38px] px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 active:scale-95 touch-manipulation cursor-pointer ${
                           currentVal === true
-                            ? 'bg-indigo-600 text-white shadow-sm'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-300'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                         }`}
                       >
-                        <Check className="h-3 w-3" />
+                        <Check className="h-3.5 w-3.5" />
                         <span>Đúng</span>
                       </button>
 
@@ -176,18 +177,18 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
                           const next = { ...tfAnswers, [item.key]: false };
                           onSelectOption?.(next);
                         }}
-                        className={`rounded-lg px-2.5 py-1 text-xs font-bold transition flex items-center gap-1 ${
+                        className={`min-h-[38px] px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 active:scale-95 touch-manipulation cursor-pointer ${
                           currentVal === false
-                            ? 'bg-rose-600 text-white shadow-sm'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            ? 'bg-rose-600 text-white shadow-sm ring-2 ring-rose-300'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                         }`}
                       >
-                        <X className="h-3 w-3" />
+                        <X className="h-3.5 w-3.5" />
                         <span>Sai</span>
                       </button>
 
                       {showAnswer && item.correctAnswer !== undefined && (
-                        <span className={`ml-1 text-[11px] font-bold ${item.correctAnswer ? 'text-indigo-600' : 'text-rose-600'}`}>
+                        <span className={`ml-1.5 text-xs font-bold px-1.5 py-0.5 rounded ${item.correctAnswer ? 'bg-indigo-50 text-indigo-700' : 'bg-rose-50 text-rose-700'}`}>
                           ({item.correctAnswer ? 'Đ' : 'S'})
                         </span>
                       )}

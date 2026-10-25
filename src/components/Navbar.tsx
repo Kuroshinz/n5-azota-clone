@@ -17,7 +17,7 @@ export const Navbar: React.FC<NavbarProps> = ({ examTitle, showLinks = true }) =
 
   return (
     <nav className="sticky top-0 z-30 border-b border-gray-200 bg-white/95 backdrop-blur shadow-sm">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6 py-2.5">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-3 sm:px-6 py-2 sm:py-2.5">
         {/* Left: Brand & Home */}
         <div className="flex items-center gap-4">
           <Link
@@ -32,7 +32,7 @@ export const Navbar: React.FC<NavbarProps> = ({ examTitle, showLinks = true }) =
               <span className="text-lg font-black tracking-tight text-indigo-900 group-hover:text-indigo-600 transition">
                 AZOTA
               </span>
-              <span className="ml-1 text-[10px] font-semibold uppercase tracking-wider text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded-full border border-indigo-100">
+              <span className="hidden xs:inline-block ml-1 text-[10px] font-semibold uppercase tracking-wider text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded-full border border-indigo-100">
                 GDPT 2018
               </span>
             </div>
@@ -90,7 +90,7 @@ export const Navbar: React.FC<NavbarProps> = ({ examTitle, showLinks = true }) =
                     <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700 font-bold text-xs uppercase">
                       {user.fullName.charAt(0)}
                     </div>
-                    <span className="text-xs font-semibold text-gray-800 max-w-[100px] sm:max-w-[130px] truncate">
+                    <span className="text-xs font-semibold text-gray-800 max-w-[75px] sm:max-w-[130px] truncate">
                       {user.fullName}
                     </span>
                   </div>

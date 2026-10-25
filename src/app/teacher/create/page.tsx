@@ -409,7 +409,7 @@ export default function CreateExamPage() {
       <Navbar />
 
       {/* Main Sub-Header */}
-      <div className="border-b border-gray-200 bg-white/95 px-6 py-4 shadow-sm">
+      <div className="border-b border-gray-200 bg-white/95 px-3 sm:px-6 py-3 sm:py-4 shadow-sm">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <div className="flex items-center gap-3">
             <Link
@@ -468,9 +468,9 @@ export default function CreateExamPage() {
         </div>
       </div>
 
-      <main className="mx-auto max-w-7xl px-6 pt-6">
+      <main className="mx-auto max-w-7xl px-3 sm:px-6 pt-4 sm:pt-6">
         {/* Exam Metadata bar */}
-        <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 shadow-sm">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-12 items-center">
             <div className="sm:col-span-6">
               <label className="block text-xs font-semibold text-gray-700 mb-1">
@@ -701,7 +701,7 @@ export default function CreateExamPage() {
                       </button>
                     </div>
 
-                    <div className="flex items-center gap-1.5 text-xs">
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
                       <button
                         type="button"
                         onClick={() => handleInsertTemplate('mc')}
