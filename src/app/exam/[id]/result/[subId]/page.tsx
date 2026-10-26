@@ -62,30 +62,23 @@ export default function ExamResultPage() {
     const localSub = getSubmission(subId);
     if (localSub) setSubmission(localSub);
 
-    // 2. Fetch from server API
-    Promise.all([
-      fetch(`/api/exams/${examId}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.success && data.exam) {
+    // 2. Fetch from server API securely
+    fetch(`/api/submissions/${subId}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.submission) {
+          setSubmission(data.submission);
+          saveSubmission(data.submission);
+          if (data.exam) {
             setExam(data.exam);
             saveExam(data.exam);
           }
-        })
-        .catch(() => {}),
-
-      fetch(`/api/submissions/${subId}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.success && data.submission) {
-            setSubmission(data.submission);
-            saveSubmission(data.submission);
-          }
-        })
-        .catch(() => {}),
-    ]).finally(() => {
-      setLoading(false);
-    });
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        setLoading(false);
+      });
   }, [examId, subId]);
 
   // Evaluate each question for status and score breakdown

@@ -373,8 +373,8 @@ export default function StudentDashboardPage() {
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5">
-                            <Shuffle className="h-3.5 w-3.5 text-purple-500" />
-                            <span>{exam.settings?.shuffleQuestions ? 'Đảo câu' : 'Cố định'}</span>
+                            <Users className="h-3.5 w-3.5 text-indigo-600" />
+                            <span className="font-semibold text-indigo-700">{exam.submissionCount ?? 0} bài nộp</span>
                           </div>
                         </div>
                       </div>

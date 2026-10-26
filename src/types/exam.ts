@@ -75,6 +75,7 @@ export interface Exam {
     fullName: string;
     phone?: string;
   } | null;
+  submissionCount?: number;
   createdAt: string;
 }
 

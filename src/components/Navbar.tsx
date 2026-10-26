@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BookOpen, PlusCircle, Home, ListFilter, LogIn, LogOut, User as UserIcon } from 'lucide-react';
+import { BookOpen, PlusCircle, Home, ListFilter, LogIn, LogOut, User as UserIcon, ShieldAlert } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 interface NavbarProps {
@@ -79,6 +79,20 @@ export const Navbar: React.FC<NavbarProps> = ({ examTitle, showLinks = true }) =
               <PlusCircle className="h-4 w-4" />
               <span className="hidden sm:inline">Tạo đề mới</span>
             </Link>
+
+            {user?.role === 'ADMIN' && (
+              <Link
+                href="/admin"
+                className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition shadow-xs ${
+                  pathname.startsWith('/admin')
+                    ? 'bg-purple-600 text-white shadow-purple-200'
+                    : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+                }`}
+              >
+                <ShieldAlert className="h-3.5 w-3.5 text-current" />
+                <span>Admin</span>
+              </Link>
+            )}
 
             {/* User Profile or Auth buttons */}
             <div className="border-l border-gray-200 pl-2 sm:pl-3 ml-1 flex items-center gap-2">

@@ -17,15 +17,49 @@ export async function GET(
     }
 
     const currentUser = getAuthUser(request);
-    // If exam is private and caller is not the author
-    if (exam.isPublic === false && exam.authorId && exam.authorId !== currentUser?.userId) {
+    const isAuthorOrAdmin = Boolean(currentUser && (currentUser.userId === exam.authorId || currentUser.role === 'ADMIN'));
+
+    // If exam is private and caller is not the author or admin
+    if (exam.isPublic === false && !isAuthorOrAdmin) {
       return NextResponse.json(
         { success: false, error: 'Đề thi này đang ở chế độ riêng tư' },
         { status: 403 }
       );
     }
 
-    return NextResponse.json({ success: true, exam });
+    // DATA PRIVACY: If caller is NOT the author or admin, sanitize and strictly strip all answers
+    if (!isAuthorOrAdmin) {
+      const sanitizedQuestions = (exam.questions || []).map(q => {
+        const sanitized: any = {
+          id: q.id,
+          type: q.type,
+          rawText: q.rawText,
+          content: q.content,
+          score: q.score,
+          options: q.options || [],
+        };
+
+        // For True/False subItems: strip correctAnswer
+        if (q.subItems && Array.isArray(q.subItems)) {
+          sanitized.subItems = q.subItems.map(item => ({
+            key: item.key,
+            content: item.content,
+          }));
+        }
+
+        // Never expose correctAnswer, explanation, or acceptedAnswers
+        return sanitized;
+      });
+
+      const sanitizedExam = {
+        ...exam,
+        questions: sanitizedQuestions,
+      };
+
+      return NextResponse.json({ success: true, exam: sanitizedExam, isAuthor: false });
+    }
+
+    return NextResponse.json({ success: true, exam, isAuthor: true });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
@@ -47,8 +81,9 @@ export async function PUT(
       return NextResponse.json({ success: false, error: 'Không tìm thấy đề thi' }, { status: 404 });
     }
 
-    // Only author can update the exam
-    if (existing.authorId && existing.authorId !== currentUser.userId) {
+    // Only author or admin can update the exam
+    const isAuthorized = existing.authorId === currentUser.userId || currentUser.role === 'ADMIN';
+    if (existing.authorId && !isAuthorized) {
       return NextResponse.json(
         { success: false, error: 'Bạn không có quyền chỉnh sửa đề thi của người khác' },
         { status: 403 }
@@ -85,8 +120,9 @@ export async function DELETE(
       return NextResponse.json({ success: false, error: 'Không tìm thấy đề thi' }, { status: 404 });
     }
 
-    // Only author can delete the exam
-    if (existing.authorId && existing.authorId !== currentUser.userId) {
+    // Only author or admin can delete the exam
+    const isAuthorized = existing.authorId === currentUser.userId || currentUser.role === 'ADMIN';
+    if (existing.authorId && !isAuthorized) {
       return NextResponse.json(
         { success: false, error: 'Bạn không có quyền xóa đề thi của người khác' },
         { status: 403 }

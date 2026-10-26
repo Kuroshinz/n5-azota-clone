@@ -1,8 +1,19 @@
 import { Exam, StudentAnswerValue, Submission } from '../types/exam';
 
-const memoryExams = new Map<string, Exam>();
-const memoryDrafts = new Map<string, Record<number, StudentAnswerValue>>();
-const memorySubmissions = new Map<string, Submission>();
+const globalForExamStorage = globalThis as unknown as {
+  __memoryExams?: Map<string, Exam>;
+  __memoryDrafts?: Map<string, Record<number, StudentAnswerValue>>;
+  __memorySubmissions?: Map<string, Submission>;
+};
+
+const memoryExams = globalForExamStorage.__memoryExams || new Map<string, Exam>();
+globalForExamStorage.__memoryExams = memoryExams;
+
+const memoryDrafts = globalForExamStorage.__memoryDrafts || new Map<string, Record<number, StudentAnswerValue>>();
+globalForExamStorage.__memoryDrafts = memoryDrafts;
+
+const memorySubmissions = globalForExamStorage.__memorySubmissions || new Map<string, Submission>();
+globalForExamStorage.__memorySubmissions = memorySubmissions;
 
 const isBrowser = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 
@@ -22,6 +33,31 @@ export function saveExam(exam: Exam): void {
       console.error('Failed to save exam to localStorage', e);
     }
   }
+}
+
+export function updateExam(id: string, updates: Partial<Exam>): Exam | null {
+  const existing = getExam(id);
+  if (!existing) return null;
+  const updated: Exam = { ...existing, ...updates };
+  saveExam(updated);
+  return updated;
+}
+
+export function deleteExam(id: string): boolean {
+  let deleted = memoryExams.delete(id);
+  if (isBrowser) {
+    try {
+      const all = listExams();
+      const filtered = all.filter(e => e.id !== id);
+      if (filtered.length !== all.length) {
+        localStorage.setItem(EXAMS_KEY, JSON.stringify(filtered));
+        deleted = true;
+      }
+    } catch (e) {
+      console.error('Failed to delete exam from localStorage', e);
+    }
+  }
+  return deleted;
 }
 
 export function getExam(id: string): Exam | null {
@@ -178,6 +214,26 @@ export function saveSubmission(submission: Submission): void {
   }
 }
 
+export function deleteSubmission(id: string): boolean {
+  let deleted = memorySubmissions.delete(id);
+  if (isBrowser) {
+    try {
+      const raw = localStorage.getItem(SUBMISSIONS_KEY);
+      if (raw) {
+        const list: Submission[] = JSON.parse(raw);
+        const filtered = list.filter(s => s.id !== id);
+        if (filtered.length !== list.length) {
+          localStorage.setItem(SUBMISSIONS_KEY, JSON.stringify(filtered));
+          deleted = true;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to delete submission from localStorage', e);
+    }
+  }
+  return deleted;
+}
+
 export function getSubmissions(examId?: string): Submission[] {
   let list: Submission[] = [];
   if (isBrowser) {
@@ -210,3 +266,40 @@ export function getSubmission(id: string): Submission | null {
 
 export const getStoredExams = listExams;
 
+export function clearMemoryExams() { memoryExams.clear(); }
+export function clearMemorySubmissions() { memorySubmissions.clear(); }
+(globalThis as any).__clearExamStores = () => { memoryExams.clear(); memorySubmissions.clear(); };
+
+(globalThis as any).__getExamRecord = (id: string) => {
+  const e = getExam(id);
+  if (!e) return null;
+  return {
+    id: e.id,
+    title: e.title,
+    durationMinutes: e.durationMinutes,
+    totalQuestions: e.totalQuestions,
+    questionsJson: JSON.stringify(e.questions || []),
+    settingsJson: JSON.stringify(e.settings || {}),
+    createdAt: new Date(e.createdAt || Date.now()),
+  };
+};
+
+(globalThis as any).__getSubmissionRecord = (id: string) => {
+  const s = getSubmission(id);
+  if (!s) return null;
+  return {
+    id: s.id,
+    examId: s.examId,
+    studentName: s.studentName,
+    studentPhone: s.studentPhone,
+    score: s.score,
+    totalScore: s.totalScore,
+    answersJson: JSON.stringify(s.answers || {}),
+    proctoringReportJson: JSON.stringify(s.proctoringReport || {}),
+    submittedAt: new Date(s.submittedAt || Date.now()),
+  };
+};
+
+(globalThis as any).__getExamCount = () => {
+  return listExams().length;
+};
