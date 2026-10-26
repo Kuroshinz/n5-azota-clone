@@ -144,7 +144,7 @@ export const ExamSettingsModal: React.FC<ExamSettingsModalProps> = ({
                   className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 >
                   <option value={1}>1 lần (Cực kỳ nghiêm ngặt)</option>
-                  <option value={3}>3 lần (Tiêu chuẩn Azota)</option>
+                  <option value={3}>3 lần (Tiêu chuẩn N5Exam)</option>
                   <option value={5}>5 lần (Linh hoạt)</option>
                   <option value={0}>Không thu bài (chỉ cảnh báo)</option>
                 </select>

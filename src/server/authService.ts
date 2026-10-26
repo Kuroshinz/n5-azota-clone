@@ -6,7 +6,14 @@ const JWT_SECRET = process.env.JWT_SECRET || 'azota-super-secret-jwt-key-gdpt201
 const TOKEN_EXPIRY = '7d';
 
 // Dedicated Super Admin Credentials (works consistently on both Localhost & Production)
-export const SUPER_ADMIN_CONFIG = {
+export const SUPER_ADMIN_CONFIG: {
+  id: string;
+  phone: string;
+  email: string | null;
+  fullName: string;
+  passwordPlain: string;
+  role: string;
+} = {
   id: 'admin-master-root',
   phone: '0999999999',
   email: 'admin@azota.vn',
@@ -228,7 +235,7 @@ export class AuthService {
     // Guarantees Admin account always works seamlessly on both Localhost and Vercel Production
     if (
       cleanId === SUPER_ADMIN_CONFIG.phone ||
-      cleanId.toLowerCase() === SUPER_ADMIN_CONFIG.email.toLowerCase() ||
+      cleanId.toLowerCase() === SUPER_ADMIN_CONFIG.email?.toLowerCase() ||
       cleanId.toLowerCase() === 'admin'
     ) {
       if (password === SUPER_ADMIN_CONFIG.passwordPlain) {
@@ -345,6 +352,169 @@ export class AuthService {
     throw new Error('Tài khoản không tồn tại');
   }
 
+  async updateProfile(userId: string, data: { fullName?: string; email?: string }): Promise<SanitizedUser> {
+    const cleanName = data.fullName?.trim();
+    if (cleanName !== undefined && cleanName.length < 2) {
+      throw new Error('Họ và tên phải có ít nhất 2 ký tự');
+    }
+
+    const cleanEmail = data.email !== undefined ? (data.email.trim() ? data.email.trim() : null) : undefined;
+    if (cleanEmail) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(cleanEmail)) {
+        throw new Error('Định dạng email không hợp lệ');
+      }
+    }
+
+    // 1. Super Admin Profile update
+    if (userId === SUPER_ADMIN_CONFIG.id) {
+      if (cleanName) SUPER_ADMIN_CONFIG.fullName = cleanName;
+      if (cleanEmail !== undefined) SUPER_ADMIN_CONFIG.email = cleanEmail;
+
+      if (isDatabaseConfigured) {
+        try {
+          await prisma.user.upsert({
+            where: { phone: SUPER_ADMIN_CONFIG.phone },
+            update: {
+              fullName: SUPER_ADMIN_CONFIG.fullName,
+              email: SUPER_ADMIN_CONFIG.email,
+            },
+            create: {
+              id: SUPER_ADMIN_CONFIG.id,
+              fullName: SUPER_ADMIN_CONFIG.fullName,
+              phone: SUPER_ADMIN_CONFIG.phone,
+              email: SUPER_ADMIN_CONFIG.email,
+              passwordHash: await this.hashPassword(SUPER_ADMIN_CONFIG.passwordPlain),
+              role: 'ADMIN',
+            }
+          });
+        } catch (e: any) {
+          console.warn('Could not update admin in DB:', e.message);
+        }
+      }
+
+      return {
+        id: SUPER_ADMIN_CONFIG.id,
+        fullName: SUPER_ADMIN_CONFIG.fullName,
+        phone: SUPER_ADMIN_CONFIG.phone,
+        email: SUPER_ADMIN_CONFIG.email,
+        role: 'ADMIN',
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+      };
+    }
+
+    // 2. Database update
+    if (isDatabaseConfigured) {
+      try {
+        const updated = await prisma.user.update({
+          where: { id: userId },
+          data: {
+            fullName: cleanName,
+            email: cleanEmail,
+          }
+        });
+        return {
+          id: updated.id,
+          fullName: updated.fullName,
+          phone: updated.phone,
+          email: updated.email,
+          role: updated.role,
+          createdAt: updated.createdAt,
+        };
+      } catch (e: any) {
+        console.warn('Prisma updateProfile failed, falling back to memory store:', e.message);
+      }
+    }
+
+    // 3. In-memory update
+    const memUser = memoryUsers.get(userId);
+    if (!memUser) {
+      throw new Error('Người dùng không tồn tại');
+    }
+    if (cleanName) memUser.fullName = cleanName;
+    if (cleanEmail !== undefined) memUser.email = cleanEmail;
+
+    return {
+      id: memUser.id,
+      fullName: memUser.fullName,
+      phone: memUser.phone,
+      email: memUser.email,
+      role: memUser.role,
+      createdAt: memUser.createdAt,
+    };
+  }
+
+  async changePassword(userId: string, input: { oldPassword: string; newPassword: string }): Promise<boolean> {
+    if (!input.oldPassword) {
+      throw new Error('Vui lòng nhập mật khẩu hiện tại');
+    }
+    if (!input.newPassword || input.newPassword.length < 6) {
+      throw new Error('Mật khẩu mới phải có ít nhất 6 ký tự');
+    }
+
+    // 1. Super Admin Password change
+    if (userId === SUPER_ADMIN_CONFIG.id) {
+      if (input.oldPassword !== SUPER_ADMIN_CONFIG.passwordPlain) {
+        throw new Error('Mật khẩu hiện tại không chính xác');
+      }
+      SUPER_ADMIN_CONFIG.passwordPlain = input.newPassword;
+
+      if (isDatabaseConfigured) {
+        try {
+          const hash = await this.hashPassword(input.newPassword);
+          await prisma.user.upsert({
+            where: { phone: SUPER_ADMIN_CONFIG.phone },
+            update: { passwordHash: hash },
+            create: {
+              id: SUPER_ADMIN_CONFIG.id,
+              fullName: SUPER_ADMIN_CONFIG.fullName,
+              phone: SUPER_ADMIN_CONFIG.phone,
+              email: SUPER_ADMIN_CONFIG.email,
+              passwordHash: hash,
+              role: 'ADMIN',
+            }
+          });
+        } catch (e: any) {
+          console.warn('Could not update admin password in DB:', e.message);
+        }
+      }
+      return true;
+    }
+
+    // 2. Database User Password change
+    if (isDatabaseConfigured) {
+      try {
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (user) {
+          const isMatch = await this.comparePassword(input.oldPassword, user.passwordHash);
+          if (!isMatch) {
+            throw new Error('Mật khẩu hiện tại không chính xác');
+          }
+          const hash = await this.hashPassword(input.newPassword);
+          await prisma.user.update({
+            where: { id: userId },
+            data: { passwordHash: hash }
+          });
+          return true;
+        }
+      } catch (e: any) {
+        if (e.message === 'Mật khẩu hiện tại không chính xác') throw e;
+      }
+    }
+
+    // 3. In-memory User Password change
+    const memUser = memoryUsers.get(userId);
+    if (!memUser) {
+      throw new Error('Người dùng không tồn tại');
+    }
+    const isMatch = await this.comparePassword(input.oldPassword, memUser.passwordHash);
+    if (!isMatch) {
+      throw new Error('Mật khẩu hiện tại không chính xác');
+    }
+    memUser.passwordHash = await this.hashPassword(input.newPassword);
+    return true;
+  }
+
   async getUserById(id: string): Promise<SanitizedUser | null> {
     if (id === SUPER_ADMIN_CONFIG.id) {
       return {
@@ -388,6 +558,185 @@ export class AuthService {
     }
 
     return null;
+  }
+
+  async adminCreateUser(input: {
+    fullName: string;
+    phone: string;
+    email?: string;
+    password?: string;
+    role?: string;
+  }): Promise<SanitizedUser> {
+    const cleanPhone = input.phone.trim();
+    const cleanEmail = input.email ? input.email.trim().toLowerCase() : null;
+    const cleanRole = input.role === 'ADMIN' ? 'ADMIN' : 'USER';
+    const plainPassword = input.password && input.password.length >= 6 ? input.password : 'Azota123@';
+
+    // Prevent duplicate phone/email with super admin
+    if (cleanPhone === SUPER_ADMIN_CONFIG.phone || (cleanEmail && cleanEmail === SUPER_ADMIN_CONFIG.email)) {
+      throw new Error('Số điện thoại hoặc Email này được bảo lưu cho Super Admin');
+    }
+
+    if (isDatabaseConfigured) {
+      try {
+        const existingByPhone = await prisma.user.findUnique({ where: { phone: cleanPhone } });
+        if (existingByPhone) throw new Error('Số điện thoại đã tồn tại trên hệ thống');
+
+        if (cleanEmail) {
+          const existingByEmail = await prisma.user.findUnique({ where: { email: cleanEmail } });
+          if (existingByEmail) throw new Error('Email đã tồn tại trên hệ thống');
+        }
+
+        const passwordHash = await this.hashPassword(plainPassword);
+        const user = await prisma.user.create({
+          data: {
+            fullName: input.fullName.trim(),
+            phone: cleanPhone,
+            email: cleanEmail,
+            passwordHash,
+            role: cleanRole,
+          }
+        });
+
+        return {
+          id: user.id,
+          fullName: user.fullName,
+          phone: user.phone,
+          email: user.email,
+          role: user.role,
+          createdAt: user.createdAt,
+        };
+      } catch (e: any) {
+        if (e.message.includes('tồn tại') || e.message.includes('bảo lưu')) throw e;
+      }
+    }
+
+    // Fallback in-memory
+    for (const u of memoryUsers.values()) {
+      if (u.phone === cleanPhone) throw new Error('Số điện thoại đã tồn tại trên hệ thống');
+      if (cleanEmail && u.email === cleanEmail) throw new Error('Email đã tồn tại trên hệ thống');
+    }
+
+    const passwordHash = await this.hashPassword(plainPassword);
+    const newId = `user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const userRecord = {
+      id: newId,
+      fullName: input.fullName.trim(),
+      phone: cleanPhone,
+      email: cleanEmail,
+      passwordHash,
+      role: cleanRole,
+      createdAt: new Date(),
+    };
+    memoryUsers.set(newId, userRecord);
+
+    return {
+      id: userRecord.id,
+      fullName: userRecord.fullName,
+      phone: userRecord.phone,
+      email: userRecord.email,
+      role: userRecord.role,
+      createdAt: userRecord.createdAt,
+    };
+  }
+
+  async adminResetPassword(userId: string, newPassword: string): Promise<boolean> {
+    if (!newPassword || newPassword.length < 6) {
+      throw new Error('Mật khẩu mới phải có tối thiểu 6 ký tự');
+    }
+
+    if (userId === SUPER_ADMIN_CONFIG.id) {
+      SUPER_ADMIN_CONFIG.passwordPlain = newPassword;
+      if (isDatabaseConfigured) {
+        try {
+          const hash = await this.hashPassword(newPassword);
+          await prisma.user.update({
+            where: { phone: SUPER_ADMIN_CONFIG.phone },
+            data: { passwordHash: hash }
+          });
+        } catch {}
+      }
+      return true;
+    }
+
+    if (isDatabaseConfigured) {
+      try {
+        const hash = await this.hashPassword(newPassword);
+        await prisma.user.update({
+          where: { id: userId },
+          data: { passwordHash: hash }
+        });
+        return true;
+      } catch {}
+    }
+
+    const memUser = memoryUsers.get(userId);
+    if (!memUser) throw new Error('Người dùng không tồn tại');
+    memUser.passwordHash = await this.hashPassword(newPassword);
+    return true;
+  }
+
+  async adminUpdateUser(userId: string, data: {
+    fullName?: string;
+    phone?: string;
+    email?: string;
+    role?: string;
+  }): Promise<SanitizedUser> {
+    const cleanName = data.fullName?.trim();
+    const cleanPhone = data.phone?.trim();
+    const cleanEmail = data.email !== undefined ? (data.email.trim() ? data.email.trim().toLowerCase() : null) : undefined;
+    const cleanRole = data.role === 'ADMIN' ? 'ADMIN' : 'USER';
+
+    if (userId === SUPER_ADMIN_CONFIG.id) {
+      if (cleanName) SUPER_ADMIN_CONFIG.fullName = cleanName;
+      if (cleanEmail !== undefined) SUPER_ADMIN_CONFIG.email = cleanEmail;
+      return {
+        id: SUPER_ADMIN_CONFIG.id,
+        fullName: SUPER_ADMIN_CONFIG.fullName,
+        phone: SUPER_ADMIN_CONFIG.phone,
+        email: SUPER_ADMIN_CONFIG.email,
+        role: 'ADMIN',
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+      };
+    }
+
+    if (isDatabaseConfigured) {
+      try {
+        const updated = await prisma.user.update({
+          where: { id: userId },
+          data: {
+            fullName: cleanName,
+            phone: cleanPhone,
+            email: cleanEmail,
+            role: cleanRole,
+          }
+        });
+        return {
+          id: updated.id,
+          fullName: updated.fullName,
+          phone: updated.phone,
+          email: updated.email,
+          role: updated.role,
+          createdAt: updated.createdAt,
+        };
+      } catch {}
+    }
+
+    const memUser = memoryUsers.get(userId);
+    if (!memUser) throw new Error('Người dùng không tồn tại');
+    if (cleanName) memUser.fullName = cleanName;
+    if (cleanPhone) memUser.phone = cleanPhone;
+    if (cleanEmail !== undefined) memUser.email = cleanEmail;
+    if (data.role) memUser.role = cleanRole;
+
+    return {
+      id: memUser.id,
+      fullName: memUser.fullName,
+      phone: memUser.phone,
+      email: memUser.email,
+      role: memUser.role,
+      createdAt: memUser.createdAt,
+    };
   }
 }
 

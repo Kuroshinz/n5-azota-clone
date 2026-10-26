@@ -18,6 +18,66 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url);
+    const subDetailId = searchParams.get('id');
+    if (subDetailId) {
+      if (!isDatabaseConfigured) {
+        const local = getLocalSubmissions().find(s => s.id === subDetailId);
+        if (!local) return NextResponse.json({ success: false, error: 'Bài làm không tồn tại' }, { status: 404 });
+        const exam = getLocalExam(local.examId);
+        return NextResponse.json({ success: true, submission: local, exam });
+      }
+
+      try {
+        const record = await prisma.submission.findUnique({
+          where: { id: subDetailId },
+          include: {
+            exam: true,
+            user: { select: { id: true, fullName: true, phone: true, email: true } }
+          }
+        });
+        if (!record) return NextResponse.json({ success: false, error: 'Bài làm không tồn tại' }, { status: 404 });
+
+        let answers: any = {};
+        let proctoringReport: any = { outScreenCount: 0, fullscreenExitCount: 0, events: [] };
+        try { answers = JSON.parse(record.answersJson); } catch {}
+        try { proctoringReport = JSON.parse(record.proctoringReportJson); } catch {}
+
+        let examQuestions: any = [];
+        let examSettings: any = {};
+        try { examQuestions = JSON.parse(record.exam.questionsJson); } catch {}
+        try { examSettings = JSON.parse(record.exam.settingsJson); } catch {}
+
+        return NextResponse.json({
+          success: true,
+          submission: {
+            id: record.id,
+            examId: record.examId,
+            studentName: record.studentName,
+            studentPhone: record.studentPhone,
+            score: record.score,
+            totalScore: record.totalScore,
+            submittedAt: record.submittedAt.toISOString(),
+            answers,
+            proctoringReport,
+            user: record.user,
+          },
+          exam: {
+            id: record.exam.id,
+            title: record.exam.title,
+            durationMinutes: record.exam.durationMinutes,
+            totalQuestions: record.exam.totalQuestions,
+            questions: examQuestions,
+            settings: examSettings,
+          }
+        });
+      } catch {
+        const local = getLocalSubmissions().find(s => s.id === subDetailId);
+        if (!local) return NextResponse.json({ success: false, error: 'Bài làm không tồn tại' }, { status: 404 });
+        const exam = getLocalExam(local.examId);
+        return NextResponse.json({ success: true, submission: local, exam });
+      }
+    }
+
     const query = (searchParams.get('q') || '').toLowerCase().trim();
     const violationsOnly = searchParams.get('violations') === 'true';
 

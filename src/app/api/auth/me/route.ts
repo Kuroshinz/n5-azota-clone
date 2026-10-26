@@ -1,17 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authService } from '@/server/authService';
+import { authService, getAuthUser } from '@/server/authService';
 
 export async function GET(req: NextRequest) {
   try {
-    const tokenCookie = req.cookies.get('azota_token')?.value;
-    const authHeader = req.headers.get('authorization');
-    const token = tokenCookie || (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null);
-
-    if (!token) {
-      return NextResponse.json({ success: true, user: null });
-    }
-
-    const payload = authService.verifyToken(token);
+    const payload = getAuthUser(req);
     if (!payload) {
       return NextResponse.json({ success: true, user: null });
     }
@@ -20,5 +12,27 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: true, user: user || null });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
+
+export async function PUT(req: NextRequest) {
+  try {
+    const payload = getAuthUser(req);
+    if (!payload) {
+      return NextResponse.json(
+        { success: false, error: 'Vui lòng đăng nhập để thực hiện thao tác này' },
+        { status: 401 }
+      );
+    }
+
+    const body = await req.json();
+    const updatedUser = await authService.updateProfile(payload.userId, {
+      fullName: body.fullName,
+      email: body.email,
+    });
+
+    return NextResponse.json({ success: true, user: updatedUser });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 400 });
   }
 }

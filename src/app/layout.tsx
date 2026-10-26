@@ -3,7 +3,7 @@ import type { Metadata, Viewport } from 'next';
 import { Providers } from '@/components/Providers';
 
 export const metadata: Metadata = {
-  title: 'Azota - Nền tảng tạo đề thi và bài tập online',
+  title: 'N5Exam - Nền tảng Khảo thí & Luyện thi Trực tuyến GDPT 2018',
   description: 'Hệ thống giám sát thi trực tuyến, nhận diện toán học KaTeX và chấm thi tự động.',
 };
 

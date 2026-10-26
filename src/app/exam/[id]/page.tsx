@@ -20,6 +20,7 @@ import { QuestionCard } from '../../../components/QuestionCard';
 import { QuestionNavGrid } from '../../../components/QuestionNavGrid';
 import { ProctoringModal } from '../../../components/ProctoringModal';
 import {
+  Award,
   Clock,
   Shield,
   AlertCircle,
@@ -457,7 +458,7 @@ export default function ExamTakingPage() {
               </div>
 
               <div className="flex items-center justify-between text-xs text-gray-500 pt-0.5">
-                <span>Đã có tài khoản Azota?</span>
+                <span>Đã có tài khoản N5Exam?</span>
                 <Link
                   href={`/login?redirect=/exam/${exam.id}`}
                   className="font-semibold text-indigo-600 hover:text-indigo-800 transition underline underline-offset-2 flex items-center gap-1"
@@ -504,6 +505,14 @@ export default function ExamTakingPage() {
               <span>{isProctoringEnabled ? 'Bật Fullscreen & Bắt đầu thi' : 'Bắt đầu làm bài thi'}</span>
               <ArrowRight className="h-4 w-4" />
             </button>
+
+            <Link
+              href={`/exam/${exam.id}/leaderboard`}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50/90 py-2.5 text-xs font-bold text-amber-900 hover:bg-amber-100 hover:border-amber-400 active:scale-95 transition shadow-sm"
+            >
+              <Award className="h-4 w-4 text-amber-600" />
+              <span>Xem Bảng Xếp Hạng & Điểm Cao 🏆</span>
+            </Link>
 
             <Link
               href="/"

@@ -17,6 +17,7 @@ import {
   Shield,
   ShieldAlert,
   Award,
+  Trophy,
   FileText,
   Check,
   X,
@@ -283,6 +284,13 @@ export default function ExamResultPage() {
               <Printer className="h-3.5 w-3.5" />
               <span>In kết quả</span>
             </button>
+            <Link
+              href={`/exam/${exam.id}/leaderboard?highlight=${submission.id}`}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-md shadow-amber-200 transition"
+            >
+              <Trophy className="h-3.5 w-3.5" />
+              <span>Bảng Xếp Hạng</span>
+            </Link>
             <Link
               href={`/exam/${exam.id}`}
               className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-md shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition"
@@ -778,7 +786,14 @@ export default function ExamResultPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 border-t border-gray-100 pt-3">
+                <div className="mt-4 border-t border-gray-100 pt-3 space-y-2">
+                  <Link
+                    href={`/exam/${exam.id}/leaderboard?highlight=${submission.id}`}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white py-2.5 text-xs font-bold shadow-md shadow-amber-200 transition"
+                  >
+                    <Trophy className="h-3.5 w-3.5" />
+                    <span>Xem Bảng Vàng Xếp Hạng 🏆</span>
+                  </Link>
                   <Link
                     href={`/exam/${exam.id}`}
                     className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-indigo-50 py-2.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition"

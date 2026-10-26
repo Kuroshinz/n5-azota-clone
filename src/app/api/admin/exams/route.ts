@@ -18,6 +18,16 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url);
+    const examDetailId = searchParams.get('id');
+    if (examDetailId) {
+      const { examService } = await import('@/server/examService');
+      const exam = await examService.getExam(examDetailId);
+      if (!exam) {
+        return NextResponse.json({ success: false, error: 'Đề thi không tồn tại' }, { status: 404 });
+      }
+      return NextResponse.json({ success: true, exam });
+    }
+
     const query = (searchParams.get('q') || '').toLowerCase().trim();
     const visibility = searchParams.get('visibility'); // 'public', 'private', or null
 

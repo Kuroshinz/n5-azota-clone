@@ -189,3 +189,83 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
+
+/**
+ * POST /api/admin/users
+ * Admin creates a new user directly
+ */
+export async function POST(req: NextRequest) {
+  try {
+    const auth = getAuthUser(req);
+    if (!auth || auth.role !== 'ADMIN') {
+      return NextResponse.json({ success: false, error: 'Bạn không có quyền thực hiện' }, { status: 403 });
+    }
+
+    const body = await req.json();
+    const { fullName, phone, email, password, role } = body;
+
+    if (!fullName || typeof fullName !== 'string' || fullName.trim().length < 2) {
+      return NextResponse.json({ success: false, error: 'Họ và tên tối thiểu 2 ký tự' }, { status: 400 });
+    }
+    if (!phone || typeof phone !== 'string' || phone.trim().length < 9) {
+      return NextResponse.json({ success: false, error: 'Số điện thoại không hợp lệ' }, { status: 400 });
+    }
+
+    const { authService } = await import('@/server/authService');
+    const newUser = await authService.adminCreateUser({
+      fullName,
+      phone,
+      email,
+      password,
+      role: role || 'USER',
+    });
+
+    return NextResponse.json({ success: true, user: newUser });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message || 'Tạo người dùng thất bại' }, { status: 400 });
+  }
+}
+
+/**
+ * PUT /api/admin/users
+ * Admin updates a user or resets their password
+ */
+export async function PUT(req: NextRequest) {
+  try {
+    const auth = getAuthUser(req);
+    if (!auth || auth.role !== 'ADMIN') {
+      return NextResponse.json({ success: false, error: 'Bạn không có quyền thực hiện' }, { status: 403 });
+    }
+
+    const body = await req.json();
+    const { userId, newPassword, fullName, email, phone, role } = body;
+
+    if (!userId) {
+      return NextResponse.json({ success: false, error: 'Thiếu userId' }, { status: 400 });
+    }
+
+    const { authService } = await import('@/server/authService');
+
+    // 1. Reset password if provided
+    if (newPassword) {
+      if (typeof newPassword !== 'string' || newPassword.length < 6) {
+        return NextResponse.json({ success: false, error: 'Mật khẩu mới tối thiểu 6 ký tự' }, { status: 400 });
+      }
+      await authService.adminResetPassword(userId, newPassword);
+    }
+
+    // 2. Update user info if provided
+    let updatedUser = null;
+    if (fullName || email !== undefined || phone || role) {
+      updatedUser = await authService.adminUpdateUser(userId, { fullName, email, phone, role });
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Cập nhật tài khoản thành công',
+      user: updatedUser,
+    });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message || 'Cập nhật thất bại' }, { status: 400 });
+  }
+}

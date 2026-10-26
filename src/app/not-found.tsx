@@ -13,7 +13,7 @@ export default function NotFound() {
           href="/"
           className="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-indigo-700 transition"
         >
-          Về trang chủ Azota
+          Về trang chủ N5Exam
         </Link>
       </div>
     </div>

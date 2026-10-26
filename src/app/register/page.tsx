@@ -66,7 +66,7 @@ function RegisterForm() {
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-200 group-hover:scale-105 transition">
               <BookOpen className="h-6 w-6" />
             </div>
-            <span className="text-2xl font-black tracking-tight text-indigo-950">AZOTA</span>
+            <span className="text-2xl font-black tracking-tight text-indigo-950">N5EXAM</span>
           </Link>
           <h1 className="text-xl font-bold text-gray-900 mt-2">Đăng ký tài khoản mới</h1>
           <p className="text-xs text-gray-500 mt-1">Tạo tài khoản để bắt đầu tạo đề thi hoặc tham gia phòng thi</p>

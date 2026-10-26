@@ -18,6 +18,8 @@ interface AuthContextType {
   register: (data: { fullName: string; phone: string; email?: string; password: string }) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  updateProfile: (data: { fullName?: string; email?: string }) => Promise<{ success: boolean; error?: string; user?: UserProfile }>;
+  changePassword: (data: { oldPassword: string; newPassword: string }) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -126,8 +128,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const updateProfile = async (data: { fullName?: string; email?: string }) => {
+    try {
+      const res = await fetch('/api/auth/me', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const result = await res.json();
+      if (result.success && result.user) {
+        setUser(result.user);
+        return { success: true, user: result.user };
+      }
+      return { success: false, error: result.error || 'Cập nhật hồ sơ thất bại' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Lỗi mạng khi cập nhật' };
+    }
+  };
+
+  const changePassword = async (data: { oldPassword: string; newPassword: string }) => {
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const result = await res.json();
+      if (result.success) {
+        return { success: true };
+      }
+      return { success: false, error: result.error || 'Đổi mật khẩu thất bại' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Lỗi mạng khi đổi mật khẩu' };
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser, updateProfile, changePassword }}>
       {children}
     </AuthContext.Provider>
   );
