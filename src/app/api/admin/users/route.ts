@@ -202,6 +202,48 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
+    if (body.action === 'bulk_delete') {
+      const { userIds } = body;
+      if (!Array.isArray(userIds) || userIds.length === 0) {
+        return NextResponse.json({ success: false, error: 'Thiếu danh sách userIds' }, { status: 400 });
+      }
+      let count = 0;
+      for (const uid of userIds) {
+        if (uid !== auth.userId && uid !== 'admin-master-root') {
+          try {
+            if (isDatabaseConfigured) {
+              await prisma.user.delete({ where: { id: uid } }).catch(() => deleteLocalUser(uid));
+            } else {
+              deleteLocalUser(uid);
+            }
+            count++;
+          } catch {}
+        }
+      }
+      return NextResponse.json({ success: true, message: `Đã xóa thành công ${count} người dùng` });
+    }
+
+    if (body.action === 'bulk_role') {
+      const { userIds, newRole } = body;
+      if (!Array.isArray(userIds) || !['USER', 'ADMIN', 'TEACHER'].includes(newRole)) {
+        return NextResponse.json({ success: false, error: 'Dữ liệu không hợp lệ' }, { status: 400 });
+      }
+      let count = 0;
+      for (const uid of userIds) {
+        if (uid !== auth.userId || newRole === 'ADMIN') {
+          try {
+            if (isDatabaseConfigured) {
+              await prisma.user.update({ where: { id: uid }, data: { role: newRole } }).catch(() => updateLocalUserRole(uid, newRole));
+            } else {
+              updateLocalUserRole(uid, newRole);
+            }
+            count++;
+          } catch {}
+        }
+      }
+      return NextResponse.json({ success: true, message: `Đã cập nhật vai trò cho ${count} người dùng` });
+    }
+
     const { fullName, phone, email, password, role } = body;
 
     if (!fullName || typeof fullName !== 'string' || fullName.trim().length < 2) {

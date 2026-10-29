@@ -138,3 +138,62 @@ export async function DELETE(
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const { id } = params;
+    const currentUser = getAuthUser(request);
+    if (!currentUser) {
+      return NextResponse.json({ success: false, error: 'Vui lòng đăng nhập để thực hiện' }, { status: 401 });
+    }
+
+    const existing = await examService.getExam(id);
+    if (!existing) {
+      return NextResponse.json({ success: false, error: 'Không tìm thấy đề thi' }, { status: 404 });
+    }
+
+    // Permission: must be author, admin, or exam is public
+    const isAuthorized = existing.authorId === currentUser.userId || currentUser.role === 'ADMIN' || existing.isPublic !== false;
+    if (!isAuthorized) {
+      return NextResponse.json(
+        { success: false, error: 'Bạn không có quyền nhân bản đề thi này' },
+        { status: 403 }
+      );
+    }
+
+    let body: any = {};
+    try {
+      body = await request.json();
+    } catch {}
+
+    const newId = `exam_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const clonedTitle = body.title ? body.title.trim() : `${existing.title} (Bản sao)`;
+
+    // Deep clone questions
+    const clonedQuestions = JSON.parse(JSON.stringify(existing.questions || []));
+
+    const clonedExam: any = {
+      ...JSON.parse(JSON.stringify(existing)),
+      id: newId,
+      title: clonedTitle,
+      authorId: currentUser.userId,
+      author: {
+        id: currentUser.userId,
+        fullName: currentUser.fullName,
+        phone: (currentUser as any).phone || undefined,
+      },
+      questions: clonedQuestions,
+      createdAt: new Date().toISOString(),
+      submissionCount: 0,
+      isPublic: existing.isPublic !== undefined ? existing.isPublic : true,
+    };
+
+    await examService.saveExam(clonedExam);
+    return NextResponse.json({ success: true, exam: clonedExam });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}

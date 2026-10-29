@@ -12,6 +12,7 @@ import { ExamSettingsModal } from '../../../../components/ExamSettingsModal';
 import { GdptMatrixModal } from '../../../../components/GdptMatrixModal';
 import { Navbar } from '../../../../components/Navbar';
 import {
+  Printer,
   Save,
   ArrowLeft,
   Settings,
@@ -90,7 +91,7 @@ export default function EditExamPage() {
         const data = await res.json();
         if (data.success && data.exam) {
           // Check ownership if user is loaded
-          if (user && data.exam.authorId && data.exam.authorId !== user.id) {
+          if (user && user.role !== 'ADMIN' && data.exam.authorId && data.exam.authorId !== user.id) {
             setIsUnauthorized(true);
             setIsLoading(false);
             return;
@@ -212,7 +213,7 @@ export default function EditExamPage() {
         setSaveSuccess(true);
         setTimeout(() => {
           setSaveSuccess(false);
-          router.push('/teacher/exams');
+          if (user?.role === 'ADMIN') { router.push('/admin'); } else { router.push('/teacher/exams'); }
         }, 1200);
       } else {
         alert(data.error || 'Lỗi khi lưu đề thi');
@@ -222,7 +223,7 @@ export default function EditExamPage() {
       saveExam(updatedExam);
       setSaveSuccess(true);
       setTimeout(() => {
-        router.push('/teacher/exams');
+        if (user?.role === 'ADMIN') { router.push('/admin'); } else { router.push('/teacher/exams'); }
       }, 1200);
     } finally {
       setIsSaving(false);
@@ -243,7 +244,7 @@ export default function EditExamPage() {
   }
 
   // Access Denied Shield for non-authors
-  if (isUnauthorized || (exam && user && exam.authorId && exam.authorId !== user.id)) {
+  if (isUnauthorized || (exam && user && user.role !== 'ADMIN' && exam.authorId && exam.authorId !== user.id)) {
     return (
       <div className="min-h-screen bg-slate-100 pb-16">
         <Navbar />
@@ -305,16 +306,21 @@ export default function EditExamPage() {
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Link
-              href="/teacher/exams"
+              href={user?.role === 'ADMIN' ? '/admin' : '/teacher/exams'}
               className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition shadow-sm"
-              title="Quay lại danh sách"
+              title={user?.role === 'ADMIN' ? 'Quay lại Admin Panel' : 'Quay lại danh sách'}
             >
               <ArrowLeft className="h-4 w-4" />
             </Link>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-lg sm:text-xl font-black text-gray-900">
-                  Chỉnh sửa đề thi
+                <h1 className="text-lg sm:text-xl font-black text-gray-900 flex items-center gap-2">
+                  <span>Chỉnh sửa đề thi</span>
+                  {user?.role === 'ADMIN' && (
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                      Admin Editor
+                    </span>
+                  )}
                 </h1>
                 <span
                   className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
@@ -361,6 +367,16 @@ export default function EditExamPage() {
               <span className="hidden sm:inline">Ma trận GDPT</span>
             </button>
 
+            {/* Print & Word Export Button */}
+            <Link
+              href={`/exam/${examId}/print`}
+              target="_blank"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/80 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 transition shadow-2xs"
+              title="In đề thi giấy hoặc Xuất file Word (.doc)"
+            >
+              <Printer className="h-4 w-4 text-blue-600" />
+              <span className="hidden sm:inline">In / Xuất Word</span>
+            </Link>
             {/* Settings Modal Button */}
             <button
               onClick={() => setIsSettingsOpen(true)}

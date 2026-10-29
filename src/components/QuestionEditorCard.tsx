@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Question, Option, SubQuestionItem, OptionKey } from '../types/exam';
 import { MathView } from './MathView';
 import {
+  Volume2,
   Trash2,
   Plus,
   Eye,
@@ -213,6 +214,53 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
             <span className="hidden sm:inline">Xóa câu</span>
           </button>
         </div>
+      </div>
+
+      {/* Audio / Listening Comprehension Section */}
+      <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50/40 p-3">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-blue-900">
+            <Volume2 className="h-4 w-4 text-blue-600" />
+            <span>File âm thanh / Nghe hiểu (JLPT Choukai / Tiếng Anh):</span>
+          </div>
+          {question.audioUrl && (
+            <button
+              type="button"
+              onClick={() => onChange({ ...question, audioUrl: undefined, audioPlayLimit: undefined })}
+              className="text-[11px] font-semibold text-rose-600 hover:text-rose-800 transition cursor-pointer"
+            >
+              Xóa audio
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <div className="sm:col-span-2">
+            <input
+              type="text"
+              value={question.audioUrl || ''}
+              onChange={(e) => onChange({ ...question, audioUrl: e.target.value.trim() || undefined })}
+              placeholder="Dán link audio MP3 (ví dụ: https://domain.com/choukai-mondai1.mp3)..."
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <select
+              value={question.audioPlayLimit ?? 0}
+              onChange={(e) => onChange({ ...question, audioPlayLimit: Number(e.target.value) || undefined })}
+              className="w-full rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-700 focus:border-blue-500 focus:outline-none cursor-pointer"
+            >
+              <option value={0}>Nghe không giới hạn</option>
+              <option value={1}>Chỉ nghe 1 lần</option>
+              <option value={2}>Nghe tối đa 2 lần (Chuẩn JLPT)</option>
+              <option value={3}>Nghe tối đa 3 lần</option>
+            </select>
+          </div>
+        </div>
+        {question.audioUrl && (
+          <div className="mt-2.5 pt-2 border-t border-blue-100/80 flex items-center gap-2">
+            <audio controls src={question.audioUrl} className="w-full h-8 rounded" controlsList="nodownload" />
+          </div>
+        )}
       </div>
 
       {/* Question Content Editor */}

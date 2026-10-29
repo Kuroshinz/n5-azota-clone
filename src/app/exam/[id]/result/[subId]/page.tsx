@@ -51,6 +51,18 @@ export default function ExamResultPage() {
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<'all' | 'correct' | 'wrong' | 'unanswered'>('all');
+  const [showCertModal, setShowCertModal] = useState(false);
+
+  const handleStartRetryWrong = () => {
+    if (!exam) return;
+    const wrongItems = evaluatedQuestions.filter(q => q.status === 'wrong' || q.status === 'unanswered');
+    if (wrongItems.length === 0) return;
+    if (typeof window !== 'undefined') {
+      const wrongIds = wrongItems.map(q => q.question.id);
+      sessionStorage.setItem('n5_retry_wrong_qids_' + exam.id, JSON.stringify(wrongIds));
+      router.push(`/exam/${exam.id}?retry=true`);
+    }
+  };
 
   // Load exam and submission data
   useEffect(() => {
@@ -284,9 +296,32 @@ export default function ExamResultPage() {
               <Printer className="h-3.5 w-3.5" />
               <span>In kết quả</span>
             </button>
+            {/* Certificate Button */}
+            <button
+              type="button"
+              onClick={() => setShowCertModal(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-md shadow-amber-200 active:scale-95 transition"
+            >
+              <Award className="h-3.5 w-3.5" />
+              <span>Giấy Chứng Nhận 📜</span>
+            </button>
+
+            {/* Retry Wrong Questions Button */}
+            {(wrongCount + unansweredCount) > 0 && (
+              <button
+                type="button"
+                onClick={handleStartRetryWrong}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-rose-500 to-amber-500 hover:from-rose-600 hover:to-amber-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-md shadow-rose-200 active:scale-95 transition"
+                title="Làm lại riêng các câu bị sai để cải thiện kiến thức"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                <span>Luyện lại {wrongCount + unansweredCount} câu sai 🎯</span>
+              </button>
+            )}
+
             <Link
               href={`/exam/${exam.id}/leaderboard?highlight=${submission.id}`}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-md shadow-amber-200 transition"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 px-3.5 py-1.5 text-xs font-bold text-white shadow-md shadow-indigo-100 transition"
             >
               <Trophy className="h-3.5 w-3.5" />
               <span>Bảng Xếp Hạng</span>
@@ -417,6 +452,37 @@ export default function ExamResultPage() {
                   </div>
                 </div>
               )}
+
+              {/* Student Action Highlights Bar */}
+              <div className="pt-2 flex flex-wrap items-center gap-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowCertModal(true)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold hover:bg-amber-100 transition shadow-xs"
+                >
+                  <Award className="h-4 w-4 text-amber-600" />
+                  <span>Xem & Tải Giấy Chứng Nhận Vinh Danh 📜</span>
+                </button>
+
+                {(wrongCount + unansweredCount) > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleStartRetryWrong}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-50 border border-rose-300 text-rose-900 text-xs font-bold hover:bg-rose-100 transition shadow-xs"
+                  >
+                    <RotateCcw className="h-4 w-4 text-rose-600" />
+                    <span>Luyện tập lại {wrongCount + unansweredCount} câu làm sai 🎯</span>
+                  </button>
+                )}
+
+                <Link
+                  href={`/exam/${exam.id}/leaderboard?highlight=${submission.id}`}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-100 transition ml-auto"
+                >
+                  <Trophy className="h-4 w-4 text-amber-600" />
+                  <span>Xem Bảng Xếp Hạng Thí Sinh 🏆</span>
+                </Link>
+              </div>
             </div>
           </div>
         </section>
@@ -807,6 +873,89 @@ export default function ExamResultPage() {
           </div>
         )}
       </main>
+
+      {/* ========================================================== */}
+      {/* CERTIFICATE OF ACHIEVEMENT MODAL */}
+      {/* ========================================================== */}
+      {showCertModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="w-full max-w-2xl rounded-3xl bg-white shadow-2xl border-4 border-amber-400 overflow-y-auto max-h-[92vh] text-center relative p-4 sm:p-8">
+            {/* Close Button */}
+            <button
+              onClick={() => setShowCertModal(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 print:hidden p-1 rounded-full hover:bg-slate-100 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Header Ribbon */}
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-300 text-white shadow-lg shadow-amber-200 mb-3">
+              <Award className="h-8 w-8" />
+            </div>
+
+            <div className="text-[11px] font-black uppercase tracking-widest text-amber-600">
+              N5EXAM EDUCATION CERTIFICATION
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-1 font-serif">
+              GIẤY CHỨNG NHẬN HOÀN THÀNH
+            </h2>
+            <p className="text-xs text-slate-500 mt-1 italic">
+              Hệ thống Khảo thí & Luyện thi Trực tuyến Chuẩn GDPT 2018
+            </p>
+
+            <div className="my-6 border-y border-amber-200/60 py-5 bg-gradient-to-r from-amber-50/20 via-amber-50/70 to-amber-50/20 rounded-2xl">
+              <p className="text-xs font-semibold text-slate-600">Trân trọng vinh danh thí sinh:</p>
+              <h3 className="text-2xl font-black text-indigo-950 mt-1 tracking-tight">
+                {submission.studentName || 'Thí sinh N5Exam'}
+              </h3>
+              <p className="text-xs text-slate-600 mt-2">
+                Đã hoàn thành bài kiểm tra trực tuyến:{' '}
+                <strong className="text-slate-900">{exam.title}</strong>
+              </p>
+
+              <div className="mt-4 flex items-center justify-center gap-6">
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Điểm số bài làm</span>
+                  <span className="text-2xl font-black text-indigo-600">{score.toFixed(2)} / {totalScore} đ</span>
+                </div>
+                <div className="h-8 w-px bg-amber-200" />
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Xếp loại kết quả</span>
+                  <span className="text-xl font-bold text-amber-700">{gradeLabel}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-400 gap-2 border-t border-slate-100 pt-4">
+              <div>
+                Ngày cấp: <strong className="text-slate-600">{new Date(submission.submittedAt).toLocaleDateString('vi-VN')}</strong>
+              </div>
+              <div className="font-mono">
+                Mã xác thực: <strong className="text-indigo-600">{submission.id}</strong>
+              </div>
+            </div>
+
+            {/* Print and Close Actions */}
+            <div className="mt-6 flex items-center justify-center gap-3 print:hidden">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-200 transition cursor-pointer"
+              >
+                <Printer className="w-4 h-4" />
+                <span>In / Lưu Giấy Chứng Nhận (PDF)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCertModal(false)}
+                className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 transition"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

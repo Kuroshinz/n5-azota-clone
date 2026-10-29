@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import {
+  Download,
+  Printer,
   Trophy,
   Medal,
   Award,
@@ -61,6 +63,29 @@ export default function ExamLeaderboardPage() {
     fetchLeaderboard();
   }, [examId]);
 
+  const handleExportLeaderboardCSV = () => {
+    if (leaderboard.length === 0) return;
+    const headers = ['Hạng', 'Họ và tên thí sinh', 'Điểm số', 'Thang điểm', 'Thời gian nộp'];
+    const rows = leaderboard.map(item => [
+      item.rank,
+      `"${(item.studentName || 'Ẩn danh').replace(/"/g, '""')}"`,
+      item.score,
+      item.totalScore,
+      `"${new Date(item.submittedAt).toLocaleString('vi-VN')}"`
+    ]);
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Bang_Xep_Hang_${(exam?.title || 'De_thi').replace(/[^a-zA-Z0-9_-]/g, '_')}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const filteredLeaderboard = leaderboard.filter(item =>
     item.studentName.toLowerCase().includes(searchQuery.toLowerCase().trim())
   );
@@ -79,6 +104,26 @@ export default function ExamLeaderboardPage() {
         {/* Navigation & Header */}
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
+              {/* Actions: Export & Print */}
+              <button
+                type="button"
+                onClick={handleExportLeaderboardCSV}
+                className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs active:scale-95 cursor-pointer"
+                title="Tải bảng xếp hạng về máy định dạng Excel/CSV"
+              >
+                <Download className="h-3.5 w-3.5 text-emerald-600" />
+                <span className="hidden sm:inline">Xuất Excel/CSV</span>
+              </button>
+
+              <Link
+                href={`/exam/${examId}/print`}
+                target="_blank"
+                className="flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 transition shadow-2xs"
+                title="In đề thi hoặc tải bản Word"
+              >
+                <Printer className="h-3.5 w-3.5 text-blue-600" />
+                <span className="hidden sm:inline">In đề</span>
+              </Link>
             <Link
               href={`/exam/${examId}`}
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-indigo-600 transition mb-2"

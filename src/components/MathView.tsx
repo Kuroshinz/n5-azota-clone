@@ -159,7 +159,7 @@ const MathViewContent: React.FC<{ content: string }> = ({ content }) => {
                   return (
                     <span
                       key={index}
-                      className="inline-block px-0.5 align-middle"
+                      className="inline-block px-0.5 align-middle max-w-full overflow-x-auto"
                       dangerouslySetInnerHTML={{ __html: html }}
                     />
                   );

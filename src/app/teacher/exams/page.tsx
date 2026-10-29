@@ -8,6 +8,7 @@ import { ShareExamModal } from '../../../components/ShareExamModal';
 import { ExamSettingsModal } from '../../../components/ExamSettingsModal';
 import { Navbar } from '../../../components/Navbar';
 import {
+  Printer,
   BookOpen,
   Plus,
   Clock,
@@ -29,6 +30,9 @@ import {
   Search,
   Settings,
   FileSpreadsheet,
+  Trophy,
+  PlayCircle,
+  CopyPlus,
 } from 'lucide-react';
 
 export default function TeacherExamsPage() {
@@ -41,6 +45,37 @@ export default function TeacherExamsPage() {
   const [examToDelete, setExamToDelete] = useState<Exam | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'proctoring' | 'practice' | 'public' | 'private'>('all');
+  const [cloningId, setCloningId] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const handleDuplicateExam = async (examToClone: Exam) => {
+    if (cloningId) return;
+    setCloningId(examToClone.id);
+    try {
+      const res = await fetch(`/api/exams/${examToClone.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'clone' }),
+      });
+      const data = await res.json();
+      if (data.success && data.exam) {
+        setToastMessage(`Đã nhân bản đề thi thành công! Bản sao mới: "${data.exam.title}"`);
+        setTimeout(() => setToastMessage(null), 5000);
+        // Refresh exams
+        const freshRes = await fetch('/api/exams');
+        const freshData = await freshRes.json();
+        if (freshData.success && Array.isArray(freshData.exams)) {
+          setExams(freshData.exams);
+        }
+      } else {
+        alert(data.error || 'Không thể nhân bản đề thi');
+      }
+    } catch (err: any) {
+      alert('Lỗi nhân bản: ' + err.message);
+    } finally {
+      setCloningId(null);
+    }
+  };
 
   // Sync with Server Database
   const loadExams = async () => {
@@ -326,6 +361,30 @@ export default function TeacherExamsPage() {
                     <span>Xem bảng điểm bài nộp ({submissionsCount})</span>
                   </Link>
 
+                  {/* Row 1.5: Làm thử & Nhân bản */}
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/exam/${exam.id}?preview=true`}
+                      target="_blank"
+                      className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50/80 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs"
+                      title="Làm thử đề thi với vai trò giáo viên (không lưu điểm)"
+                    >
+                      <PlayCircle className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>Làm thử</span>
+                    </Link>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDuplicateExam(exam)}
+                      disabled={cloningId === exam.id}
+                      className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-purple-200 bg-purple-50/80 py-1.5 text-xs font-semibold text-purple-800 hover:bg-purple-100 transition shadow-2xs cursor-pointer disabled:opacity-50"
+                      title="Nhân bản tạo một bản sao mới của đề thi"
+                    >
+                      <CopyPlus className="h-3.5 w-3.5 text-purple-600" />
+                      <span>{cloningId === exam.id ? 'Đang chép...' : 'Nhân bản'}</span>
+                    </button>
+                  </div>
+
                   {/* Row 2: Copy Link & QR */}
                   <div className="flex items-center gap-2">
                     <button
@@ -366,7 +425,7 @@ export default function TeacherExamsPage() {
                     </button>
                   </div>
 
-                  {/* Row 3: Edit & Delete Actions */}
+                  {/* Row 3: Edit & Leaderboard & Delete Actions */}
                   <div className="flex items-center gap-2">
                     <Link
                       href={`/teacher/edit/${exam.id}`}
@@ -376,6 +435,24 @@ export default function TeacherExamsPage() {
                       <span>Sửa nội dung</span>
                     </Link>
 
+                    <Link
+                      href={`/exam/${exam.id}/leaderboard`}
+                      className="flex items-center justify-center gap-1 rounded-xl border border-amber-300 bg-amber-50/80 px-2.5 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100 transition shadow-2xs"
+                      title="Xem Bảng Xếp Hạng thí sinh"
+                    >
+                      <Trophy className="h-3.5 w-3.5 text-amber-600" />
+                      <span>BXH</span>
+                    </Link>
+
+                    <Link
+                      href={`/exam/${exam.id}/print`}
+                      target="_blank"
+                      className="flex items-center justify-center gap-1 rounded-xl border border-blue-200 bg-blue-50/70 px-2.5 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition shadow-2xs"
+                      title="In đề thi giấy hoặc Xuất file Word (.doc)"
+                    >
+                      <Printer className="h-3.5 w-3.5 text-blue-600" />
+                      <span className="hidden sm:inline">In/Word</span>
+                    </Link>
                     <button
                       type="button"
                       onClick={() => setExamToDelete(exam)}

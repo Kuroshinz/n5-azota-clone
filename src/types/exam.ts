@@ -37,6 +37,10 @@ export interface Question {
 
   // Short answer
   acceptedAnswers?: string[];
+
+  // Audio / Listening Comprehension
+  audioUrl?: string;
+  audioPlayLimit?: number;
 }
 
 export interface ExamSettings {

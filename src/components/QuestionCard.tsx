@@ -1,9 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import { Question, StudentAnswerValue } from '../types/exam';
 import { MathView } from './MathView';
-import { Flag, CheckCircle, XCircle, Check, X } from 'lucide-react';
+import { Flag, CheckCircle, XCircle, Check, X, Volume2, AlertCircle } from 'lucide-react';
 
 interface QuestionCardProps {
   question: Question;
@@ -28,6 +28,26 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
 }) => {
   const qType = question.type || 'multiple_choice';
   const displayNum = displayNumber ?? question.id;
+  const [playCount, setPlayCount] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playLimit = question.audioPlayLimit && question.audioPlayLimit > 0 ? question.audioPlayLimit : null;
+  const isAudioLocked = playLimit !== null && playCount >= playLimit;
+
+  const handleAudioPlay = () => {
+    if (playLimit !== null && playCount >= playLimit) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      return;
+    }
+  };
+
+  const handleAudioEnded = () => {
+    if (playLimit !== null) {
+      setPlayCount(prev => prev + 1);
+    }
+  };
+
 
   const typeBadgeLabel =
     qType === 'true_false'
@@ -69,6 +89,56 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
         )}
       </div>
 
+
+      {/* Audio / Listening Track */}
+      {question.audioUrl && (
+        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50/70 p-3 sm:p-3.5">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-white shadow-xs">
+                <Volume2 className="h-4 w-4" />
+              </span>
+              <div>
+                <span className="text-xs font-bold text-blue-950 block">File nghe bài thi (Listening Comprehension)</span>
+                <span className="text-[11px] text-blue-700">Nghe kỹ đoạn băng để trả lời câu hỏi</span>
+              </div>
+            </div>
+
+            {playLimit !== null ? (
+              <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                isAudioLocked
+                  ? 'bg-rose-50 text-rose-700 border-rose-200'
+                  : 'bg-white text-blue-800 border-blue-200 shadow-xs'
+              }`}>
+                {isAudioLocked ? 'Đã hết lượt nghe' : `Lượt nghe: ${playCount}/${playLimit}`}
+              </span>
+            ) : (
+              <span className="text-[11px] font-medium text-blue-600 bg-white/80 px-2 py-0.5 rounded-md border border-blue-200">
+                Không giới hạn lượt nghe
+              </span>
+            )}
+          </div>
+
+          <div onContextMenu={e => e.preventDefault()} className="select-none">
+            {isAudioLocked ? (
+              <div className="rounded-lg bg-white/90 p-2 text-center text-xs text-rose-600 font-semibold border border-rose-200 flex items-center justify-center gap-1.5">
+                <AlertCircle className="h-4 w-4" />
+                <span>Bạn đã sử dụng hết số lần nghe cho câu hỏi này ({playLimit} lần).</span>
+              </div>
+            ) : (
+              <audio
+                ref={audioRef}
+                controls
+                src={question.audioUrl}
+                onPlay={handleAudioPlay}
+                onEnded={handleAudioEnded}
+                controlsList="nodownload noplaybackrate"
+                className="w-full h-9 rounded"
+              />
+            )}
+          </div>
+        </div>
+      )}
       {/* Content */}
       <div className="mb-4 text-base font-medium text-gray-800 leading-relaxed">
         <MathView content={question.content} />

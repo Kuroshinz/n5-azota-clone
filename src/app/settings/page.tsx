@@ -19,7 +19,8 @@ import {
   Laptop,
   Check,
   Lock,
-  BadgeAlert
+  BadgeAlert,
+  Smartphone
 } from 'lucide-react';
 import { Navbar } from '@/components/Navbar';
 import { useAuth } from '@/context/AuthContext';
@@ -269,6 +270,17 @@ export default function SettingsPage() {
                 <span>Phiên đăng nhập & Thiết bị</span>
               </button>
             </nav>
+
+            <div className="mt-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('open-pwa-install'))}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition border border-indigo-100 cursor-pointer"
+              >
+                <Smartphone className="w-4 h-4 text-indigo-600" />
+                <span>Cài đặt Ứng dụng (App)</span>
+              </button>
+            </div>
           </div>
 
           {/* Main Tab Panel */}

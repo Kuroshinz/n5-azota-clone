@@ -15,7 +15,8 @@ import {
   Settings,
   ChevronDown,
   ShieldCheck,
-  UserCheck
+  UserCheck,
+  Smartphone
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -187,6 +188,18 @@ export const Navbar: React.FC<NavbarProps> = ({ examTitle, showLinks = true }) =
                           <span>Cài đặt & Hồ sơ</span>
                         </Link>
 
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDropdownOpen(false);
+                            window.dispatchEvent(new CustomEvent('open-pwa-install'));
+                          }}
+                          className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition cursor-pointer text-left"
+                        >
+                          <Smartphone className="h-4 w-4 text-indigo-500" />
+                          <span>Cài đặt Ứng dụng (App)</span>
+                        </button>
+
                         {user.role === 'ADMIN' && (
                           <Link
                             href="/admin"
@@ -243,6 +256,90 @@ export const Navbar: React.FC<NavbarProps> = ({ examTitle, showLinks = true }) =
           </div>
         )}
       </div>
+      {/* Mobile Bottom Navigation Bar (Fixed bottom for mobile web app experience) */}
+      {showLinks && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-xl px-2 py-1.5 flex items-center justify-around select-none">
+          <Link
+            href="/"
+            className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition ${
+              pathname === '/'
+                ? 'text-indigo-600 font-bold'
+                : 'text-gray-500 hover:text-gray-900 font-medium'
+            }`}
+          >
+            <Home className="h-5 w-5" />
+            <span className="text-[10px]">Trang chủ</span>
+          </Link>
+
+          <Link
+            href="/teacher/exams"
+            className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition ${
+              pathname.startsWith('/teacher/exams')
+                ? 'text-indigo-600 font-bold'
+                : 'text-gray-500 hover:text-gray-900 font-medium'
+            }`}
+          >
+            <ListFilter className="h-5 w-5" />
+            <span className="text-[10px]">Kho đề</span>
+          </Link>
+
+          <Link
+            href="/teacher/create"
+            className="flex flex-col items-center gap-0.5 py-1 px-3.5 -mt-3.5 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-300 active:scale-95 transition"
+          >
+            <PlusCircle className="h-5 w-5" />
+            <span className="text-[10px] font-bold">Tạo đề</span>
+          </Link>
+
+          {user?.role === 'ADMIN' ? (
+            <Link
+              href="/admin"
+              className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition ${
+                pathname.startsWith('/admin')
+                  ? 'text-purple-600 font-bold'
+                  : 'text-gray-500 hover:text-gray-900 font-medium'
+              }`}
+            >
+              <ShieldAlert className="h-5 w-5" />
+              <span className="text-[10px]">Admin</span>
+            </Link>
+          ) : (
+            <Link
+              href="/settings"
+              className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition ${
+                pathname === '/settings'
+                  ? 'text-indigo-600 font-bold'
+                  : 'text-gray-500 hover:text-gray-900 font-medium'
+              }`}
+            >
+              <Settings className="h-5 w-5" />
+              <span className="text-[10px]">Cài đặt</span>
+            </Link>
+          )}
+
+          {user ? (
+            <button
+              type="button"
+              onClick={() => setDropdownOpen(!dropdownOpen)}
+              className="flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl text-gray-500 hover:text-gray-900 transition cursor-pointer"
+            >
+              <div className="h-5 w-5 rounded-full bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center uppercase">
+                {user.fullName.charAt(0)}
+              </div>
+              <span className="text-[10px] max-w-[48px] truncate">{user.fullName.split(' ').pop()}</span>
+            </button>
+          ) : (
+            <Link
+              href={`/login${pathname !== '/' ? `?redirect=${encodeURIComponent(pathname)}` : ''}`}
+              className="flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl text-gray-500 hover:text-gray-900 transition"
+            >
+              <LogIn className="h-5 w-5" />
+              <span className="text-[10px]">Đăng nhập</span>
+            </Link>
+          )}
+        </div>
+      )}
+
     </nav>
   );
 };

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../../../context/AuthContext';
 import Link from 'next/link';
 import { Exam, Question, StudentAnswerValue, Submission, DEFAULT_EXAM_SETTINGS } from '../../../types/exam';
@@ -20,6 +20,8 @@ import { QuestionCard } from '../../../components/QuestionCard';
 import { QuestionNavGrid } from '../../../components/QuestionNavGrid';
 import { ProctoringModal } from '../../../components/ProctoringModal';
 import {
+  Printer,
+  Timer,
   Award,
   Clock,
   Shield,
@@ -34,6 +36,14 @@ import {
   LogIn,
   LayoutGrid,
   X,
+  List,
+  Layers,
+  ChevronLeft,
+  ChevronRight,
+  Flag,
+  PlayCircle,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
 
 const DEFAULT_SAMPLE_EXAM: Exam = {
@@ -106,6 +116,14 @@ export default function ExamTakingPage() {
   const params = useParams();
   const router = useRouter();
   const examId = (params?.id as string) || 'sample-exam-1';
+  const searchParams = useSearchParams();
+  const isRetryParam = searchParams?.get('retry') === 'true';
+  const [isRetryMode, setIsRetryMode] = useState(false);
+  const isPreview = searchParams?.get('preview') === 'true';
+  const [viewMode, setViewMode] = useState<'all' | 'single'>('all');
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+
+
 
   const [exam, setExam] = useState<Exam>(DEFAULT_SAMPLE_EXAM);
   const [displayQuestions, setDisplayQuestions] = useState<Question[]>(DEFAULT_SAMPLE_EXAM.questions);
@@ -125,6 +143,38 @@ export default function ExamTakingPage() {
   }, [user]);
 
   const [hasStarted, setHasStarted] = useState(false);
+
+  // Keyboard navigation for single mode
+  useEffect(() => {
+    if (!hasStarted || viewMode !== 'single') return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = document.activeElement?.tagName.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea') return;
+
+      if (e.key === 'ArrowLeft') {
+        setCurrentQuestionIndex(prev => Math.max(0, prev - 1));
+      } else if (e.key === 'ArrowRight') {
+        setCurrentQuestionIndex(prev => Math.min(displayQuestions.length - 1, prev + 1));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [hasStarted, viewMode, displayQuestions.length]);
+
+  const handleJumpToQuestion = (questionId: number) => {
+    const idx = displayQuestions.findIndex(q => q.id === questionId);
+    if (idx !== -1) {
+      setCurrentQuestionIndex(idx);
+    }
+    if (viewMode === 'all') {
+      setTimeout(() => {
+        const el = document.getElementById(`question-${questionId}`);
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
+    }
+  };
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAutoSubmitting, setIsAutoSubmitting] = useState(false);
 
@@ -176,8 +226,25 @@ export default function ExamTakingPage() {
       .then(data => {
         if (data.success && data.exam) {
           setExam(data.exam);
-          setDisplayQuestions(data.exam.questions);
-          setTimeLeftSeconds(data.exam.durationMinutes * 60);
+          let questionsToDisplay = data.exam.questions || [];
+          if (isRetryParam && typeof window !== 'undefined') {
+            try {
+              const stored = sessionStorage.getItem('n5_retry_wrong_qids_' + examId);
+              if (stored) {
+                const wrongIds = JSON.parse(stored);
+                const filtered = questionsToDisplay.filter((q: any) =>
+                  wrongIds.includes(q.id) || wrongIds.includes(Number(q.id)) || wrongIds.includes(String(q.id))
+                );
+                if (filtered.length > 0) {
+                  questionsToDisplay = filtered;
+                  setIsRetryMode(true);
+                }
+              }
+            } catch {}
+          }
+          setDisplayQuestions(questionsToDisplay);
+          const customTime = isRetryParam ? Math.max(5, questionsToDisplay.length * 3) : data.exam.durationMinutes;
+          setTimeLeftSeconds(customTime * 60);
           saveExam(data.exam);
         }
       })
@@ -257,7 +324,7 @@ export default function ExamTakingPage() {
 
     // Apply shuffling
     const shuffled = shuffleExamQuestions(
-      exam.questions,
+      displayQuestions,
       exam.settings?.shuffleQuestions ?? false,
       exam.settings?.shuffleOptions ?? false
     );
@@ -312,6 +379,7 @@ export default function ExamTakingPage() {
           studentPhone: finalStudentPhone,
           answers,
           proctoringReport: finalReport,
+          isPreview,
         }),
       });
       const data = await res.json();
@@ -321,10 +389,12 @@ export default function ExamTakingPage() {
     } catch (e) {
       console.warn('Submission API error, falling back to local storage', e);
     } finally {
-      saveSubmission(finalSubmission);
+      if (!isPreview) {
+        saveSubmission(finalSubmission);
+      }
       clearDraft(exam.id);
       // Seamlessly redirect to the dedicated Result & Analysis Page!
-      router.push(`/exam/${exam.id}/result/${finalSubmission.id}`);
+      router.push(`/exam/${exam.id}/result/${finalSubmission.id}${isPreview ? '?preview=true' : ''}`);
     }
   };
 
@@ -358,6 +428,21 @@ export default function ExamTakingPage() {
             Thời gian: <strong>{exam.durationMinutes} phút</strong> | Số lượng:{' '}
             <strong>{exam.totalQuestions} câu hỏi</strong> (Trắc nghiệm, Đúng/Sai, Trả lời ngắn)
           </p>
+
+          {/* Teacher Preview Mode Banner if active */}
+          {isPreview && (
+            <div className="mb-6 rounded-2xl bg-amber-50 p-4 border border-amber-200 text-left flex items-start gap-3">
+              <div className="p-2 rounded-xl bg-amber-100 text-amber-700 shrink-0">
+                <PlayCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-xs text-amber-900 uppercase tracking-wider">Chế độ Làm thử của Giáo viên (Test Run)</h4>
+                <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
+                  Bạn đang trải nghiệm đề thi với tư cách giáo viên. Kết quả thi và lịch sử làm bài sẽ không được ghi vào bảng điểm của học sinh hay ảnh hưởng đến thống kê xếp hạng.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Mode Badge & Guidance Card */}
           {isProctoringEnabled ? (
@@ -507,6 +592,14 @@ export default function ExamTakingPage() {
             </button>
 
             <Link
+              href={`/exam/${exam.id}/print`}
+              target="_blank"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50/80 py-2.5 text-xs font-bold text-blue-800 hover:bg-blue-100 hover:border-blue-300 active:scale-95 transition shadow-2xs"
+            >
+              <Printer className="h-4 w-4 text-blue-600" />
+              <span>In đề thi giấy & Tải file Word (.doc) 📄</span>
+            </Link>
+            <Link
               href={`/exam/${exam.id}/leaderboard`}
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50/90 py-2.5 text-xs font-bold text-amber-900 hover:bg-amber-100 hover:border-amber-400 active:scale-95 transition shadow-sm"
             >
@@ -551,6 +644,14 @@ export default function ExamTakingPage() {
                 Thí sinh: <strong>{user?.fullName || studentName || 'Học sinh'}</strong>
               </p>
             </div>
+
+            {/* Teacher Preview Badge */}
+            {isPreview && (
+              <span className="hidden sm:inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-800 border border-amber-200">
+                <PlayCircle className="h-3 w-3 text-amber-600" />
+                Làm thử
+              </span>
+            )}
 
             {/* Mode Indicator badge */}
             {isProctoringEnabled ? (
@@ -605,23 +706,127 @@ export default function ExamTakingPage() {
         </div>
       </header>
 
+      {/* Sticky Progress Bar & View Mode Toggle */}
+      <div className="sticky top-[53px] sm:top-[57px] z-10 border-b border-slate-200/80 bg-white/95 px-3 sm:px-6 py-2 backdrop-blur shadow-2xs">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 font-semibold text-slate-700">
+            <span>Tiến độ:</span>
+            <span className="text-indigo-600 font-bold">{Object.keys(answers).length}/{displayQuestions.length} câu</span>
+            <span className="text-slate-400">({displayQuestions.length > 0 ? Math.round((Object.keys(answers).length / displayQuestions.length) * 100) : 0}%)</span>
+            {flaggedIds.size > 0 && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full ml-1">
+                <Flag className="w-3 h-3 text-amber-500 fill-amber-500" />
+                {flaggedIds.size} cờ
+              </span>
+            )}
+          </div>
+
+          {/* View Mode Switcher */}
+          <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setViewMode('all')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                viewMode === 'all'
+                  ? 'bg-white text-indigo-700 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Xem tất cả</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('single')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                viewMode === 'single'
+                  ? 'bg-white text-indigo-700 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Tập trung từng câu</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Visual Progress Line */}
+        <div className="mx-auto max-w-7xl mt-1.5 w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-indigo-500 to-emerald-500 transition-all duration-300 rounded-full"
+            style={{
+              width: `${displayQuestions.length > 0 ? Math.round((Object.keys(answers).length / displayQuestions.length) * 100) : 0}%`,
+            }}
+          />
+        </div>
+      </div>
+
       {/* Main Examination Layout: 2 Columns */}
       <main className="mx-auto max-w-7xl px-3 sm:px-6 pt-4 sm:pt-6">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-          {/* Question List (3 Cols) */}
+          {/* Question List or Single Focus Card (3 Cols) */}
           <div className="space-y-4 lg:col-span-3">
-            {displayQuestions.map((q, index) => (
-              <QuestionCard
-                key={q.id}
-                question={q}
-                displayNumber={index + 1}
-                selectedOption={answers[q.id]}
-                isFlagged={flaggedIds.has(q.id)}
-                onSelectOption={val => handleSelectOption(q.id, val)}
-                onToggleFlag={() => handleToggleFlag(q.id)}
-                showAnswer={false}
-              />
-            ))}
+            {viewMode === 'all' ? (
+              displayQuestions.map((q, index) => (
+                <QuestionCard
+                  key={q.id}
+                  question={q}
+                  displayNumber={index + 1}
+                  selectedOption={answers[q.id]}
+                  isFlagged={flaggedIds.has(q.id)}
+                  onSelectOption={val => handleSelectOption(q.id, val)}
+                  onToggleFlag={() => handleToggleFlag(q.id)}
+                  showAnswer={false}
+                />
+              ))
+            ) : (
+              displayQuestions[currentQuestionIndex] && (
+                <div className="space-y-4">
+                  <QuestionCard
+                    key={displayQuestions[currentQuestionIndex].id}
+                    question={displayQuestions[currentQuestionIndex]}
+                    displayNumber={currentQuestionIndex + 1}
+                    selectedOption={answers[displayQuestions[currentQuestionIndex].id]}
+                    isFlagged={flaggedIds.has(displayQuestions[currentQuestionIndex].id)}
+                    onSelectOption={val => handleSelectOption(displayQuestions[currentQuestionIndex].id, val)}
+                    onToggleFlag={() => handleToggleFlag(displayQuestions[currentQuestionIndex].id)}
+                    showAnswer={false}
+                  />
+
+                  {/* Single Mode Navigation Bar */}
+                  <div className="flex items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs">
+                    <button
+                      type="button"
+                      disabled={currentQuestionIndex === 0}
+                      onClick={() => setCurrentQuestionIndex(prev => Math.max(0, prev - 1))}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-100 disabled:opacity-40 transition cursor-pointer"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      <span>Câu trước</span>
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-xl">
+                        Câu {currentQuestionIndex + 1} / {displayQuestions.length}
+                      </span>
+                      <span className="hidden md:inline text-[11px] text-slate-400">
+                        (Dùng phím ← / →)
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={currentQuestionIndex >= displayQuestions.length - 1}
+                      onClick={() => setCurrentQuestionIndex(prev => Math.min(displayQuestions.length - 1, prev + 1))}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 disabled:opacity-40 transition shadow-xs cursor-pointer"
+                    >
+                      <span>Câu tiếp theo</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )
+            )}
           </div>
 
           {/* Navigation & Info Sidebar (1 Col) */}
@@ -630,10 +835,7 @@ export default function ExamTakingPage() {
               questions={displayQuestions}
               answers={answers}
               flaggedQuestionIds={flaggedIds}
-              onSelectQuestion={(questionId) => {
-                const el = document.getElementById(`question-${questionId}`);
-                el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              }}
+              onSelectQuestion={handleJumpToQuestion}
             />
 
             {/* Anti-cheat or Practice card */}
@@ -699,8 +901,7 @@ export default function ExamTakingPage() {
                 flaggedQuestionIds={flaggedIds}
                 onSelectQuestion={(questionId) => {
                   setShowMobileNav(false);
-                  const el = document.getElementById(`question-${questionId}`);
-                  el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  handleJumpToQuestion(questionId);
                 }}
               />
             </div>
@@ -733,44 +934,125 @@ export default function ExamTakingPage() {
         }}
       />
 
-      {/* Confirmation Modal before Submit */}
-      {showConfirmSubmit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-              <AlertCircle className="h-6 w-6" />
-            </div>
+      {/* Enhanced Confirmation Modal before Submit */}
+      {showConfirmSubmit && (() => {
+        const answeredCount = Object.keys(answers).length;
+        const unansweredList = displayQuestions.filter(q => answers[q.id] === undefined || answers[q.id] === '');
+        const flaggedList = displayQuestions.filter(q => flaggedIds.has(q.id));
 
-            <h3 className="text-lg font-bold text-gray-900 mb-1">Xác nhận nộp bài thi?</h3>
-            <p className="text-xs text-gray-500 mb-4">
-              Bạn đã hoàn thành{' '}
-              <strong>
-                {Object.keys(answers).length} / {displayQuestions.length}
-              </strong>{' '}
-              câu hỏi. Bạn có chắc chắn muốn nộp bài thi ngay bây giờ?
-            </p>
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center gap-3 pb-3 border-b border-slate-100 mb-4">
+                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${
+                  unansweredList.length > 0 ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                }`}>
+                  {unansweredList.length > 0 ? <AlertTriangle className="h-6 w-6" /> : <CheckCircle2 className="h-6 w-6" />}
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">Rà soát trước khi Nộp bài</h3>
+                  <p className="text-xs text-gray-500">Kiểm tra kỹ các câu hỏi trước khi xác nhận nộp bài</p>
+                </div>
+              </div>
 
-            <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                disabled={isSubmitting}
-                onClick={() => setShowConfirmSubmit(false)}
-                className="rounded-xl border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition"
-              >
-                Tiếp tục làm bài
-              </button>
-              <button
-                type="button"
-                disabled={isSubmitting}
-                onClick={() => handleSubmitExam()}
-                className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-md hover:bg-indigo-700 transition disabled:opacity-50"
-              >
-                {isSubmitting ? 'Đang nộp...' : 'Xác nhận nộp bài'}
-              </button>
+              {/* Stats Overview */}
+              <div className="grid grid-cols-3 gap-2.5 mb-4">
+                <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-center">
+                  <div className="text-lg font-black text-slate-800">{answeredCount}/{displayQuestions.length}</div>
+                  <div className="text-[11px] text-slate-500 font-semibold mt-0.5">Đã làm</div>
+                </div>
+                <div className={`p-3 rounded-2xl border text-center ${
+                  unansweredList.length > 0 ? 'bg-amber-50/80 border-amber-200 text-amber-800' : 'bg-emerald-50/80 border-emerald-200 text-emerald-800'
+                }`}>
+                  <div className="text-lg font-black">{unansweredList.length}</div>
+                  <div className="text-[11px] font-semibold mt-0.5">Chưa làm</div>
+                </div>
+                <div className="p-3 rounded-2xl bg-indigo-50/80 border border-indigo-200 text-center text-indigo-800">
+                  <div className="text-lg font-black">{flaggedList.length}</div>
+                  <div className="text-[11px] font-semibold mt-0.5">Đang gắn cờ</div>
+                </div>
+              </div>
+
+              {/* Warning if unanswered */}
+              {unansweredList.length > 0 && (
+                <div className="mb-4 p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900">
+                  <div className="font-bold flex items-center gap-1.5 mb-1.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    <span>Bạn còn {unansweredList.length} câu chưa trả lời:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pt-1">
+                    {unansweredList.map((q) => {
+                      const qIdx = displayQuestions.findIndex(x => x.id === q.id);
+                      return (
+                        <button
+                          key={q.id}
+                          type="button"
+                          onClick={() => {
+                            setShowConfirmSubmit(false);
+                            handleJumpToQuestion(q.id);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-amber-900 font-bold text-xs hover:bg-amber-100 transition shadow-2xs cursor-pointer"
+                          title="Bấm để chuyển tới làm câu này"
+                        >
+                          Câu {qIdx + 1}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Notice if flagged */}
+              {flaggedList.length > 0 && (
+                <div className="mb-4 p-3.5 rounded-2xl bg-indigo-50 border border-indigo-200 text-xs text-indigo-900">
+                  <div className="font-bold flex items-center gap-1.5 mb-1.5">
+                    <Flag className="w-4 h-4 text-indigo-600" />
+                    <span>Các câu bạn đã gắn cờ xem lại ({flaggedList.length}):</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pt-1">
+                    {flaggedList.map((q) => {
+                      const qIdx = displayQuestions.findIndex(x => x.id === q.id);
+                      return (
+                        <button
+                          key={q.id}
+                          type="button"
+                          onClick={() => {
+                            setShowConfirmSubmit(false);
+                            handleJumpToQuestion(q.id);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-white border border-indigo-300 text-indigo-900 font-bold text-xs hover:bg-indigo-100 transition shadow-2xs cursor-pointer"
+                          title="Bấm để xem lại câu này"
+                        >
+                          Câu {qIdx + 1}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => setShowConfirmSubmit(false)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  {unansweredList.length > 0 ? 'Làm tiếp câu còn thiếu' : 'Tiếp tục rà soát'}
+                </button>
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => handleSubmitExam()}
+                  className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-xs font-bold text-white shadow-md hover:shadow-indigo-200 transition disabled:opacity-50 cursor-pointer"
+                >
+                  {isSubmitting ? 'Đang nộp...' : 'Xác nhận nộp bài'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
