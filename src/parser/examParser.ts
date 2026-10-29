@@ -23,6 +23,69 @@ import { normalizeMathFormulas } from './mathConverter';
  * into a structured Exam domain model supporting Part I (Multiple Choice),
  * Part II (True/False with 4 sub-items), and Part III (Short Answer).
  */
+
+const OPTION_KEYS: OptionKey[] = ['A', 'B', 'C', 'D'];
+
+export function normalizeQuestion(q: Question): Question {
+  const updated: Question = { ...q };
+
+  if (updated.type === 'multiple_choice' || (!updated.type && (updated.options?.length ?? 0) > 0)) {
+    let opts = [...(updated.options || [])];
+
+    opts = opts.filter(opt => {
+      const cleanContent = (opt.content || '').trim().replace(/^[*A-D][.:)\-]\s*/i, '').trim();
+      return cleanContent.length > 0;
+    });
+
+    opts = opts.map(opt => {
+      let content = (opt.content || '').trim();
+      content = content.replace(/^(\*?[A-D][.:)\-]\s*)+/i, '').trim();
+      return { ...opt, content };
+    });
+
+    if (opts.length > 4) {
+      const trueChoices = opts.slice(-4);
+      const extraBodyOpts = opts.slice(0, -4);
+      const extraBodyText = extraBodyOpts.map(o => o.key + '. ' + o.content).join('\n');
+      if (extraBodyText) {
+        updated.content = updated.content ? updated.content + '\n' + extraBodyText : extraBodyText;
+      }
+      opts = trueChoices;
+    }
+
+    const oldCorrect = updated.correctAnswer;
+    let newCorrect = oldCorrect;
+    opts = opts.map((opt, index) => {
+      const standardKey = OPTION_KEYS[index] || ('D' as OptionKey);
+      if (oldCorrect === opt.key && !newCorrect) newCorrect = standardKey;
+      return { ...opt, key: standardKey };
+    });
+
+    if (newCorrect && !opts.some(o => o.key === newCorrect)) {
+      newCorrect = opts[0]?.key || 'A';
+    }
+
+    updated.options = opts;
+    updated.correctAnswer = newCorrect;
+  } else if (updated.type === 'true_false') {
+    const subKeys: Array<'a' | 'b' | 'c' | 'd'> = ['a', 'b', 'c', 'd'];
+    let subs = [...(updated.subItems || [])];
+    subs = subs.filter(s => (s.content || '').trim().length > 0);
+    subs = subs.map((s, index) => {
+      let content = (s.content || '').trim();
+      content = content.replace(/^(\*?[a-d][.:)\-]\s*)+/i, '').trim();
+      return { ...s, key: subKeys[index] || ('d' as const), content };
+    });
+    updated.subItems = subs;
+  }
+
+  return updated;
+}
+
+export function normalizeExamQuestions(questions: Question[]): Question[] {
+  return questions.map(normalizeQuestion);
+}
+
 export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
   if (!rawText || !rawText.trim()) {
     return {
@@ -222,7 +285,7 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
       }
 
       // Check for MC options A, B, C, D
-      const optionRegex = /(?:^|\n|\t|\s{2,}|(?<=[.!?,\)\]])\s+|\s+(?=[A-D][.:\)]))(\*?)([A-D])[\s.:\)]+\s*/g;
+      const optionRegex = /(?:^|\n|\t+|(?<=[^\n])\s{2,})(\*?)([A-D])[\s.:)\-]+\s*/g;
       const optionMatches: { index: number; length: number; isAsterisk: boolean; key: OptionKey }[] = [];
       let optMatch: RegExpExecArray | null;
 
@@ -236,7 +299,21 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
         });
       }
 
+      
+      // Smart candidate cluster selection:
+      // If there are multiple matches (e.g. data table ion A, B, C before prompt),
+      // pick the final cluster starting from the last 'A' match that has subsequent choices.
       if (optionMatches.length > 0) {
+        const lastAIdx = optionMatches.map(m => m.key).lastIndexOf('A');
+        if (lastAIdx !== -1 && lastAIdx < optionMatches.length) {
+          const tailCluster = optionMatches.slice(lastAIdx);
+          if (tailCluster.length >= 2) {
+            optionMatches.length = 0;
+            optionMatches.push(...tailCluster);
+          }
+        }
+      }
+if (optionMatches.length > 0) {
         questionType = 'multiple_choice';
         questionContent = blockContent.substring(0, optionMatches[0].index).trim();
 
@@ -245,7 +322,9 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
           const nextOpt = optionMatches[j + 1];
           const optStart = currOpt.index + currOpt.length;
           const optEnd = nextOpt ? nextOpt.index : blockContent.length;
-          const optText = blockContent.substring(optStart, optEnd).trim();
+          let optText = blockContent.substring(optStart, optEnd).trim();
+          optText = optText.replace(/^(\*?[A-D][.:)\-]\s*)+/i, '').trim();
+          if (optText.length === 0 && j < optionMatches.length - 1) continue;
 
           if (currOpt.isAsterisk) {
             detectedAnswer = currOpt.key;
@@ -257,7 +336,15 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
           });
         }
 
-        if (!detectedAnswer && rawAnswerLine) {
+        
+        const nonEmptyOpts = options.filter(o => o.content.trim().length > 0);
+        if (nonEmptyOpts.length >= 2) {
+          options.length = 0;
+          options.push(...nonEmptyOpts);
+        }
+        const stdKeys: OptionKey[] = ['A', 'B', 'C', 'D'];
+        options.forEach((o, idx) => { o.key = stdKeys[idx] || 'D'; });
+if (!detectedAnswer && rawAnswerLine) {
           const directChoice = rawAnswerLine.match(/^([A-D])\b/i);
           if (directChoice) {
             detectedAnswer = directChoice[1].toUpperCase() as OptionKey;
@@ -313,7 +400,7 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
     title: detectedTitle || 'Đề thi trắc nghiệm',
     durationMinutes: metadata?.durationMinutes || 45,
     totalQuestions: questions.length,
-    questions,
+    questions: normalizeExamQuestions(questions),
     createdAt: metadata?.createdAt || new Date().toISOString(),
   };
 }

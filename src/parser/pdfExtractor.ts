@@ -46,15 +46,20 @@ export function normalizePdfInlineChoices(text: string): string {
   return text
     .split(/\r?\n/)
     .map((line) => {
+      // Guard: Only split if the line contains at least 2 distinct choice markers
+      const optionCount = (line.match(/(?:^|\t+|\s{2,})(\*?[A-D][.:\)]|\*?\[[A-D]\]|\*?\([A-D]\))(?=\s+)/g) || []).length;
+      if (optionCount < 2) {
+        return line;
+      }
+
       // 1. Split on 2+ spaces or tabs followed by standard options: A., B., C., D. or *A., *B., *C., *D.
       let result = line
         .replace(/(?:\t+|\s{2,})(\*?[A-D][.:\)])(?=\s+)/g, '\n$1')
         .replace(/(?:\t+|\s{2,})(\*?[a-d][.:\)])(?=\s+)/g, '\n$1');
 
-      // 2. Split on brackets e.g. "(A)", "[A]" or "A:"
+      // 2. Split on brackets e.g. "(A)", "[A]"
       result = result
-        .replace(/(?:\t+|\s{2,})(\*?\[[A-D]\]|\*?\([A-D]\))(?=\s+)/gi, '\n$1')
-        .replace(/(?:\t+|\s{2,})(\*?[A-D]:)(?=\s+)/gi, '\n$1');
+        .replace(/(?:\t+|\s{2,})(\*?\[[A-D]\]|\*?\([A-D]\))(?=\s+)/gi, '\n$1');
 
       return result;
     })

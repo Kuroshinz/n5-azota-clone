@@ -5,7 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '../../../../context/AuthContext';
 import { Exam, Question, ExamSettings, DEFAULT_EXAM_SETTINGS } from '../../../../types/exam';
-import { distributeExamScores } from '../../../../parser/examParser';
+import { distributeExamScores, normalizeExamQuestions, normalizeQuestion } from '../../../../parser/examParser';
+import { ImportQuestionsModal } from '../../../../components/ImportQuestionsModal';
 import { getExam, saveExam } from '../../../../storage/examStorage';
 import { QuestionEditorCard } from '../../../../components/QuestionEditorCard';
 import { ExamSettingsModal } from '../../../../components/ExamSettingsModal';
@@ -14,6 +15,9 @@ import { Navbar } from '../../../../components/Navbar';
 import {
   Printer,
   Save,
+  UploadCloud,
+  Wand2,
+  FileCheck,
   ArrowLeft,
   Settings,
   Plus,
@@ -58,6 +62,8 @@ export default function EditExamPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isUnauthorized, setIsUnauthorized] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [normalizeToast, setNormalizeToast] = useState<string | null>(null);
 
   // Load exam
   useEffect(() => {
@@ -147,6 +153,46 @@ export default function EditExamPage() {
     };
     setQuestions([...questions, newQ]);
   };
+
+  // Batch normalize all questions to standard A-B-C-D format
+  const handleNormalizeAllQuestions = () => {
+    if (questions.length === 0) return;
+    const normalized = normalizeExamQuestions(questions);
+    setQuestions(normalized);
+    setNormalizeToast(`?? t? ??ng chu?n h?a ${normalized.length} c?u h?i th?nh c?ng!`);
+    setTimeout(() => setNormalizeToast(null), 3000);
+  };
+
+  // Handle questions imported from Word/PDF/Text
+  const handleApplyImportedQuestions = (imported: Question[], mode: 'replace' | 'append') => {
+    if (mode === 'replace') {
+      const indexed = imported.map((q, idx) => ({ ...q, id: idx + 1 }));
+      setQuestions(indexed);
+    } else {
+      const startId = questions.length;
+      const indexed = imported.map((q, idx) => ({ ...q, id: startId + idx + 1 }));
+      setQuestions([...questions, ...indexed]);
+    }
+    setNormalizeToast(`?? n?p ${imported.length} c?u h?i m?i v?o ?? thi!`);
+    setTimeout(() => setNormalizeToast(null), 3000);
+  };
+
+  // Identify questions with parsing issues or malformed options
+  const malformedCount = React.useMemo(() => {
+    return questions.filter((q) => {
+      if (q.type === 'multiple_choice' || (!q.type && (q.options?.length ?? 0) > 0)) {
+        const opts = q.options || [];
+        if (opts.length > 4) return true;
+        if (opts.some((o) => !o.content || !o.content.trim())) return true;
+        if (opts.some((o) => /^(\s*\*?[A-D][.:)\-]\s*)+/i.test(o.content))) return true;
+        const keys = opts.map((o) => o.key);
+        if (new Set(keys).size !== keys.length) return true;
+        const expected = ['A', 'B', 'C', 'D'].slice(0, opts.length);
+        if (keys.some((k, i) => k !== expected[i])) return true;
+      }
+      return false;
+    }).length;
+  }, [questions]);
 
   // Automatically distribute total score evenly (e.g. 10.00) without round-off drift
   const handleAutoDistributeScore = (targetScore: number = 10) => {
@@ -357,6 +403,26 @@ export default function EditExamPage() {
               )}
             </button>
 
+            {/* Re-import from Word/PDF Modal Button */}
+            <button
+              onClick={() => setIsImportModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 transition shadow-2xs"
+              title="Nạp lại hoặc bổ sung câu hỏi từ file Word, PDF hoặc TXT"
+            >
+              <UploadCloud className="h-4 w-4 text-indigo-600" />
+              <span className="hidden sm:inline">Nạp từ File</span>
+            </button>
+
+            {/* Batch Normalize Questions Button */}
+            <button
+              onClick={handleNormalizeAllQuestions}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition shadow-2xs"
+              title="Chu?n h?a to?n b? c?u h?i v? c?c ph??ng ?n v? ??ng chu?n A-B-C-D"
+            >
+              <Wand2 className="h-4 w-4 text-amber-600" />
+              <span className="hidden sm:inline">Chuẩn hóa A-B-C-D</span>
+            </button>
+
             {/* Matrix GDPT 2018 Button */}
             <button
               onClick={() => setIsMatrixOpen(true)}
@@ -502,6 +568,45 @@ export default function EditExamPage() {
           </div>
         </div>
 
+        {/* Toast Notification */}
+        {normalizeToast && (
+          <div className="mb-4 flex items-center justify-between rounded-xl bg-emerald-600 px-4 py-3 text-xs font-bold text-white shadow-md animate-in fade-in slide-in-from-top duration-200">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4" />
+              <span>{normalizeToast}</span>
+            </div>
+            <button onClick={() => setNormalizeToast(null)} className="opacity-80 hover:opacity-100">
+              ?
+            </button>
+          </div>
+        )}
+
+        {/* Warning Banner for Malformed Questions */}
+        {malformedCount > 0 && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50/90 p-4 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-200 text-amber-800 font-bold shrink-0">
+                ??
+              </div>
+              <div>
+                <p className="text-xs font-bold text-amber-950">
+                  Phát hiện {malformedCount} câu hỏi có phương án bị lỗi (trùng ký tự B, phương án rỗng hoặc thừa chữ B.)
+                </p>
+                <p className="text-[11px] text-amber-700">
+                  H? th?ng c? th? t? ??ng b?c t?ch s?ch s?, lo?i b? ph??ng ?n r?ng v? chu?n h?a v? th? t? A, B, C, D ch? v?i 1 click.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleNormalizeAllQuestions}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-amber-700 transition"
+            >
+              <Wand2 className="h-4 w-4" />
+              <span>T? ??ng s?a l?i ({malformedCount} c?u)</span>
+            </button>
+          </div>
+        )}
+
         {/* Questions List */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -565,6 +670,14 @@ export default function EditExamPage() {
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
         onSaveSettings={(updated: ExamSettings) => setSettings(updated)}
+      />
+
+      {/* Import Questions Modal */}
+      <ImportQuestionsModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onApplyQuestions={handleApplyImportedQuestions}
+        currentCount={questions.length}
       />
 
       {/* GDPT 2018 Matrix Modal */}

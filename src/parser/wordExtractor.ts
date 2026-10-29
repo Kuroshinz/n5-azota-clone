@@ -25,6 +25,12 @@ export function normalizeInlineChoices(text: string): string {
         return line;
       }
 
+      // Only split inline options if the line contains at least 2 distinct option markers
+      const optionCount = (line.match(/(?:^|\t+|\s{2,})(\*?[A-D][.:\)]|\*?\[[A-D]\]|\*?\([A-D]\))(?=\s+)/g) || []).length;
+      if (optionCount < 2) {
+        return line;
+      }
+
       // Split on tabs or 2+ spaces if followed by an option indicator like B., C., D. or *B., *C.
       return line
         .replace(/(?:\t+|\s{2,})(\*?[A-D][.:\)])(?=\s+)/g, '\n$1')

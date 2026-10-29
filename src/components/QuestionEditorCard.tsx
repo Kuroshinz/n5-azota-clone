@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Question, Option, SubQuestionItem, OptionKey } from '../types/exam';
+import { normalizeQuestion } from '../parser/examParser';
 import { MathView } from './MathView';
 import {
   Volume2,
@@ -39,6 +40,23 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
   const [showPreview, setShowPreview] = useState(false);
 
   const qType = question.type || 'multiple_choice';
+
+  const handleAutoCleanQuestion = () => {
+    const cleaned = normalizeQuestion(question);
+    onChange(cleaned);
+  };
+
+  const hasIssues = React.useMemo(() => {
+    if (qType === 'multiple_choice') {
+      const opts = question.options || [];
+      const hasEmpty = opts.some(o => !o.content || o.content.trim().length === 0);
+      const hasDuplicateKey = new Set(opts.map(o => o.key)).size !== opts.length;
+      const hasOver4 = opts.length > 4;
+      const hasPrefixDuplicate = opts.some(o => /^(\*?[A-D][.:)\-]\s*)+/i.test(o.content));
+      return hasEmpty || hasDuplicateKey || hasOver4 || hasPrefixDuplicate;
+    }
+    return false;
+  }, [question, qType]);
 
   const handleTypeChange = (newType: 'multiple_choice' | 'true_false' | 'short_answer') => {
     if (newType === question.type) return;
@@ -263,6 +281,23 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
         )}
       </div>
 
+      {hasIssues && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900 shadow-xs">
+          <div className="flex items-center gap-2">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-200 text-amber-800 font-bold">!</span>
+            <span>Phát hiện câu hỏi có phương án rỗng, thừa hoặc lặp nhãn (ví dụ trùng phím B)!</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleAutoCleanQuestion}
+            className="flex items-center gap-1 rounded-lg bg-amber-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-amber-700 transition cursor-pointer"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span>Tự động sửa lỗi</span>
+          </button>
+        </div>
+      )}
+
       {/* Question Content Editor */}
       <div className="mb-4">
         <div className="flex items-center justify-between mb-1.5">
@@ -321,7 +356,17 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
             <label className="text-xs font-semibold text-gray-700">
               Các phương án trả lời <span className="text-indigo-600 font-normal">(Click vào chữ cái để chọn ĐÁP ÁN ĐÚNG)</span>:
             </label>
-            {(question.options?.length ?? 0) < 4 && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleAutoCleanQuestion}
+                className="flex items-center gap-1 text-[11px] font-semibold text-amber-700 hover:text-amber-900 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md transition cursor-pointer"
+                title="Chuẩn hóa lại phương án A-B-C-D, làm sạch nhãn thừa và loại bỏ phương án rỗng"
+              >
+                <Sparkles className="h-3 w-3 text-amber-600" />
+                <span>Chuẩn hóa A-B-C-D</span>
+              </button>
+              {(question.options?.length ?? 0) < 4 && (
               <button
                 type="button"
                 onClick={handleAddOption}
@@ -330,7 +375,7 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
                 <Plus className="h-3.5 w-3.5" />
                 <span>Thêm phương án</span>
               </button>
-            )}
+            )}</div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -340,7 +385,7 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
 
               return (
                 <div
-                  key={opt.key}
+                  key={`${opt.key}-${idx}`}
                   className={`flex flex-col rounded-xl border p-2.5 transition ${
                     isCorrect
                       ? 'border-emerald-500 bg-emerald-50/40 shadow-sm'
