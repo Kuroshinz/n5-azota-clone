@@ -3,6 +3,7 @@
 import React from 'react';
 import katex from 'katex';
 import { convertWmfToSvg } from '../parser/wmfConverter';
+import { sanitizeLatexFormula, normalizeMathFormulas } from '../parser/mathConverter';
 
 interface MathViewProps {
   content: string;
@@ -87,9 +88,15 @@ function parseMarkdownTables(content: string): ContentSegment[] {
 const MathViewContent: React.FC<{ content: string }> = ({ content }) => {
   if (!content) return null;
 
+  // On-the-fly normalization: ensures chemical formulas (CO2, O2) and unwrapped LaTeX (\text{CO_2})
+  // are properly formatted as KaTeX math without causing red parse errors
+  const processedContent = React.useMemo(() => {
+    return normalizeMathFormulas(content);
+  }, [content]);
+
   // Split by markdown images: ![alt](src)
   const imageRegex = /(!\[.*?\]\(.*?\))/g;
-  const imageParts = content.split(imageRegex);
+  const imageParts = processedContent.split(imageRegex);
 
   return (
     <>
@@ -139,7 +146,7 @@ const MathViewContent: React.FC<{ content: string }> = ({ content }) => {
           <React.Fragment key={imgIndex}>
             {parts.map((part, index) => {
               if (part.startsWith('$$') && part.endsWith('$$')) {
-                const formula = part.slice(2, -2).trim();
+                const formula = sanitizeLatexFormula(part.slice(2, -2).trim());
                 try {
                   const html = katex.renderToString(formula, { displayMode: true, throwOnError: false });
                   return (
@@ -153,7 +160,7 @@ const MathViewContent: React.FC<{ content: string }> = ({ content }) => {
                   return <span key={index} className="font-mono text-sm text-gray-800">{part}</span>;
                 }
               } else if (part.startsWith('$') && part.endsWith('$')) {
-                const formula = part.slice(1, -1).trim();
+                const formula = sanitizeLatexFormula(part.slice(1, -1).trim());
                 try {
                   const html = katex.renderToString(formula, { displayMode: false, throwOnError: false });
                   return (

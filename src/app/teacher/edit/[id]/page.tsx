@@ -7,6 +7,7 @@ import { useAuth } from '../../../../context/AuthContext';
 import { Exam, Question, ExamSettings, DEFAULT_EXAM_SETTINGS } from '../../../../types/exam';
 import { distributeExamScores, normalizeExamQuestions, normalizeQuestion } from '../../../../parser/examParser';
 import { ImportQuestionsModal } from '../../../../components/ImportQuestionsModal';
+import { hasFormulaOrCharacterIssue, fixExamQuestionsCharacters } from '../../../../parser/mathConverter';
 import { getExam, saveExam } from '../../../../storage/examStorage';
 import { QuestionEditorCard } from '../../../../components/QuestionEditorCard';
 import { ExamSettingsModal } from '../../../../components/ExamSettingsModal';
@@ -191,6 +192,31 @@ export default function EditExamPage() {
         if (keys.some((k, i) => k !== expected[i])) return true;
       }
       return false;
+    }).length;
+  }, [questions]);
+
+  // Batch fix formula and character errors (e.g. \text{CO_2}, O2, chemical subscripts, KaTeX issues)
+  const handleBatchFixCharacters = () => {
+    if (questions.length === 0) return;
+    const { questions: fixed, fixedQuestionsCount, totalErrorsFixed } = fixExamQuestionsCharacters(questions);
+    setQuestions(fixed);
+    setNormalizeToast(
+      fixedQuestionsCount > 0
+        ? `Đã tự động sửa thành công lỗi ký tự & công thức cho ${fixedQuestionsCount} câu hỏi (${totalErrorsFixed} vị trí)!`
+        : 'Đề thi chuẩn hóa tốt! Không phát hiện lỗi ký tự hay công thức nào.'
+    );
+    setTimeout(() => setNormalizeToast(null), 3500);
+  };
+
+  // Identify questions with formula or character issues
+  const formulaIssueCount = React.useMemo(() => {
+    return questions.filter((q) => {
+      return (
+        hasFormulaOrCharacterIssue(q.content || '') ||
+        hasFormulaOrCharacterIssue(q.explanation || '') ||
+        q.options?.some((o) => hasFormulaOrCharacterIssue(o.content || '')) ||
+        q.subItems?.some((s) => hasFormulaOrCharacterIssue(s.content || ''))
+      );
     }).length;
   }, [questions]);
 
@@ -603,6 +629,32 @@ export default function EditExamPage() {
             >
               <Wand2 className="h-4 w-4" />
               <span>T? ??ng s?a l?i ({malformedCount} c?u)</span>
+            </button>
+          </div>
+        )}
+
+        {/* Warning Banner for Character & Formula Issues */}
+        {formulaIssueCount > 0 && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-sky-300 bg-sky-50/90 p-4 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-200 text-sky-800 font-bold shrink-0">
+                ⚛️
+              </div>
+              <div>
+                <p className="text-xs font-bold text-sky-950">
+                  Phát hiện {formulaIssueCount} câu hỏi có lỗi ký tự hoặc công thức hóa học/toán học (như \text&#123;CO_2&#125;, O₂, thiếu $...)
+                </p>
+                <p className="text-[11px] text-sky-700">
+                  Hệ thống có thể tự động bóc tách, đưa chỉ số hóa học xuống dưới chân và bao bọc công thức hợp lệ KaTeX chỉ với 1 click.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleBatchFixCharacters}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-sky-700 transition cursor-pointer"
+            >
+              <Sparkles className="h-4 w-4" />
+              <span>Tự động sửa ký tự ({formulaIssueCount} câu)</span>
             </button>
           </div>
         )}

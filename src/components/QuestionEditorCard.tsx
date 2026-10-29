@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Question, Option, SubQuestionItem, OptionKey } from '../types/exam';
 import { normalizeQuestion } from '../parser/examParser';
+import { hasFormulaOrCharacterIssue, fixQuestionFormulaErrors } from '../parser/mathConverter';
 import { MathView } from './MathView';
 import {
   Volume2,
@@ -45,6 +46,21 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
     const cleaned = normalizeQuestion(question);
     onChange(cleaned);
   };
+
+  const handleAutoFixCharacters = () => {
+    const { question: fixed, fixedCount } = fixQuestionFormulaErrors(question);
+    if (fixedCount > 0) {
+      onChange(fixed);
+    }
+  };
+
+  const hasFormulaIssue = React.useMemo(() => {
+    if (hasFormulaOrCharacterIssue(question.content || '')) return true;
+    if (hasFormulaOrCharacterIssue(question.explanation || '')) return true;
+    if (question.options?.some((o) => hasFormulaOrCharacterIssue(o.content || ''))) return true;
+    if (question.subItems?.some((s) => hasFormulaOrCharacterIssue(s.content || ''))) return true;
+    return false;
+  }, [question]);
 
   const hasIssues = React.useMemo(() => {
     if (qType === 'multiple_choice') {
@@ -282,7 +298,7 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
       </div>
 
       {hasIssues && (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900 shadow-xs">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900 shadow-xs">
           <div className="flex items-center gap-2">
             <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-200 text-amber-800 font-bold">!</span>
             <span>Phát hiện câu hỏi có phương án rỗng, thừa hoặc lặp nhãn (ví dụ trùng phím B)!</span>
@@ -294,6 +310,23 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
           >
             <Sparkles className="h-3.5 w-3.5" />
             <span>Tự động sửa lỗi</span>
+          </button>
+        </div>
+      )}
+
+      {hasFormulaIssue && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-200 bg-sky-50/90 p-2.5 text-xs text-sky-950 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-sky-200 text-sky-800 font-bold">⚛️</span>
+            <span>Phát hiện ký tự/công thức hóa học hoặc KaTeX cần chuẩn hóa (như \text&#123;CO_2&#125;, O₂, thiếu $...)</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleAutoFixCharacters}
+            className="flex items-center gap-1 rounded-lg bg-sky-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-sky-700 transition cursor-pointer"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span>Sửa lỗi ký tự</span>
           </button>
         </div>
       )}
@@ -365,6 +398,15 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
               >
                 <Sparkles className="h-3 w-3 text-amber-600" />
                 <span>Chuẩn hóa A-B-C-D</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleAutoFixCharacters}
+                className="flex items-center gap-1 text-[11px] font-semibold text-sky-700 hover:text-sky-900 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-md transition cursor-pointer"
+                title="Tự động kiểm tra và sửa lỗi ký tự, công thức hóa học (CO2, O2) và ký hiệu toán học"
+              >
+                <Sparkles className="h-3 w-3 text-sky-600" />
+                <span>Sửa lỗi ký tự</span>
               </button>
               {(question.options?.length ?? 0) < 4 && (
               <button

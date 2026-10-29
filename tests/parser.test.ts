@@ -100,7 +100,7 @@ C. Phản ứng thuận là phản ứng thu nhiệt
     expect(exam.questions).toHaveLength(1);
     const q = exam.questions[0];
     expect(q.type).toBe('multiple_choice');
-    expect(q.content).toContain('| Nhiệt độ (°C) | [$\\text{H_2}$] (mol/L) | [I2] (mol/L) | [HI] (mol/L) | Kc |');
+    expect(q.content).toContain('| Nhiệt độ (°C) | [$\\mathrm{H_2}$] (mol/L) | [I2] (mol/L) | [HI] (mol/L) | Kc |');
     expect(q.content).toContain('| 25 | 0,0355 | 0,0388 | 0,9220 | 50 |');
     expect(q.options).toHaveLength(4);
     expect(q.options[0].key).toBe('A');
