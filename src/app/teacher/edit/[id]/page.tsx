@@ -65,6 +65,8 @@ export default function EditExamPage() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [normalizeToast, setNormalizeToast] = useState<string | null>(null);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // Load exam
   useEffect(() => {
@@ -129,6 +131,72 @@ export default function EditExamPage() {
     const next = [...questions];
     next[index] = updated;
     setQuestions(next);
+  };
+
+  // Drag and Drop & Quick Move Handlers for Reordering Questions
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.setData('text/plain', index.toString());
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === targetIndex) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    const next = [...questions];
+    const [moved] = next.splice(draggedIndex, 1);
+    next.splice(targetIndex, 0, moved);
+
+    const reindexed = next.map((q, idx) => ({
+      ...q,
+      id: idx + 1,
+      rawText: q.rawText ? q.rawText.replace(/^(?:Câu|Bài|Question)\s*\d+/i, `Câu ${idx + 1}`) : `Câu ${idx + 1}: `,
+    }));
+
+    setQuestions(reindexed);
+    setNormalizeToast(`Đã di chuyển Câu ${draggedIndex + 1} tới vị trí Câu ${targetIndex + 1}!`);
+    setTimeout(() => setNormalizeToast(null), 2500);
+
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleMoveQuestion = (fromIndex: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
+    if (targetIndex < 0 || targetIndex >= questions.length) return;
+
+    const next = [...questions];
+    const temp = next[fromIndex];
+    next[fromIndex] = next[targetIndex];
+    next[targetIndex] = temp;
+
+    const reindexed = next.map((q, idx) => ({
+      ...q,
+      id: idx + 1,
+      rawText: q.rawText ? q.rawText.replace(/^(?:Câu|Bài|Question)\s*\d+/i, `Câu ${idx + 1}`) : `Câu ${idx + 1}: `,
+    }));
+
+    setQuestions(reindexed);
+    setNormalizeToast(`Đã đổi vị trí Câu ${fromIndex + 1} và Câu ${targetIndex + 1}!`);
+    setTimeout(() => setNormalizeToast(null), 2000);
   };
 
   // Insert a new question at any specific position (at beginning, between questions, or at end)
@@ -710,6 +778,16 @@ export default function EditExamPage() {
             </div>
           </div>
 
+          {/* Quick Tip for Drag & Drop Reordering */}
+          {questions.length > 1 && (
+            <div className="flex items-center gap-2 text-[11px] text-gray-600 bg-slate-50/80 px-3.5 py-2 rounded-xl border border-gray-200 shadow-2xs">
+              <span className="font-bold text-indigo-600 shrink-0">💡 Mẹo sắp xếp:</span>
+              <span>
+                Bạn có thể <strong>kéo thả biểu tượng ⠿</strong> ở đầu mỗi câu hoặc bấm nút <strong>▲ / ▼</strong> để di chuyển vị trí câu hỏi theo ý muốn!
+              </span>
+            </div>
+          )}
+
           {questions.map((q, idx) => (
             <React.Fragment key={q.id || idx}>
               {/* Insertion Separator Between Questions */}
@@ -730,13 +808,29 @@ export default function EditExamPage() {
                 </div>
               )}
 
-              <QuestionEditorCard
-                displayNumber={idx + 1}
-                question={q}
-                onChange={(updated) => handleQuestionChange(idx, updated)}
-                onDelete={() => handleDeleteQuestion(idx)}
-                onInsertBelow={() => handleInsertQuestion(idx + 1)}
-              />
+              <div
+                draggable={true}
+                onDragStart={(e) => handleDragStart(e, idx)}
+                onDragOver={(e) => handleDragOver(e, idx)}
+                onDragLeave={() => { if (dragOverIndex === idx) setDragOverIndex(null); }}
+                onDrop={(e) => handleDrop(e, idx)}
+                onDragEnd={handleDragEnd}
+                className="transition-all"
+              >
+                <QuestionEditorCard
+                  displayNumber={idx + 1}
+                  question={q}
+                  onChange={(updated) => handleQuestionChange(idx, updated)}
+                  onDelete={() => handleDeleteQuestion(idx)}
+                  onInsertBelow={() => handleInsertQuestion(idx + 1)}
+                  onMoveUp={() => handleMoveQuestion(idx, 'up')}
+                  onMoveDown={() => handleMoveQuestion(idx, 'down')}
+                  isFirst={idx === 0}
+                  isLast={idx === questions.length - 1}
+                  isDragging={draggedIndex === idx}
+                  isDragOver={dragOverIndex === idx && draggedIndex !== idx}
+                />
+              </div>
             </React.Fragment>
           ))}
 

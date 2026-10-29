@@ -145,4 +145,37 @@ describe('Enhanced Exam Features: Duplicate Exam & Test Run Preview', () => {
     expect(reindexed[2].content).toBe('Q2');
     expect(reindexed[2].rawText).toContain('Câu 3');
   });
+  it('supports drag-and-drop reordering and quick move with automatic re-indexing', () => {
+    const questions = [
+      { id: 1, rawText: 'Câu 1: Câu đầu tiên', content: 'Q1' },
+      { id: 2, rawText: 'Câu 2: Câu thứ hai', content: 'Q2' },
+      { id: 3, rawText: 'Câu 3: Câu thứ ba', content: 'Q3' },
+    ];
+
+    // Simulate Drag Q3 (index 2) to the top (index 0)
+    const fromIndex = 2;
+    const toIndex = 0;
+    const reordered = [...questions];
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, moved);
+
+    const reindexed = reordered.map((q, idx) => ({
+      ...q,
+      id: idx + 1,
+      rawText: q.rawText.replace(/^(?:Câu|Bài|Question)\s*\d+/i, 'Câu ' + (idx + 1)),
+    }));
+
+    expect(reindexed).toHaveLength(3);
+    expect(reindexed[0].content).toBe('Q3');
+    expect(reindexed[0].id).toBe(1);
+    expect(reindexed[0].rawText).toContain('Câu 1');
+
+    expect(reindexed[1].content).toBe('Q1');
+    expect(reindexed[1].id).toBe(2);
+    expect(reindexed[1].rawText).toContain('Câu 2');
+
+    expect(reindexed[2].content).toBe('Q2');
+    expect(reindexed[2].id).toBe(3);
+    expect(reindexed[2].rawText).toContain('Câu 3');
+  });
 });

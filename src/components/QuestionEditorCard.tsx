@@ -8,6 +8,9 @@ import { MathView } from './MathView';
 import {
   Volume2,
   Trash2,
+  GripVertical,
+  ArrowUp,
+  ArrowDown,
   Plus,
   Eye,
   CheckCircle,
@@ -29,6 +32,12 @@ interface QuestionEditorCardProps {
   onChange: (updated: Question) => void;
   onDelete: () => void;
   onInsertBelow?: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  isFirst?: boolean;
+  isLast?: boolean;
+  isDragging?: boolean;
+  isDragOver?: boolean;
 }
 
 const OPTION_KEYS: OptionKey[] = ['A', 'B', 'C', 'D'];
@@ -39,6 +48,12 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
   onChange,
   onDelete,
   onInsertBelow,
+  onMoveUp,
+  onMoveDown,
+  isFirst,
+  isLast,
+  isDragging,
+  isDragOver,
 }) => {
   const [showPreview, setShowPreview] = useState(false);
 
@@ -186,10 +201,50 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
   };
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition hover:shadow-md">
+    <div
+      className={`rounded-2xl border bg-white p-5 shadow-sm transition-all duration-150 ${
+        isDragging
+          ? 'opacity-40 scale-[0.99] border-dashed border-indigo-400 bg-indigo-50/20'
+          : isDragOver
+          ? 'border-2 border-indigo-500 bg-indigo-50/30 shadow-md ring-2 ring-indigo-200'
+          : 'border-gray-200 hover:shadow-md'
+      }`}
+    >
       {/* Top Bar */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
         <div className="flex items-center gap-2">
+          {/* Drag Handle */}
+          <div
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-indigo-600 cursor-grab active:cursor-grabbing transition"
+            title="Kéo thả để di chuyển câu hỏi lên/xuống theo ý thích"
+          >
+            <GripVertical className="h-4 w-4" />
+          </div>
+
+          {/* Quick Move Up/Down buttons for mobile & quick reordering */}
+          {(onMoveUp || onMoveDown) && (
+            <div className="flex items-center gap-0.5 rounded-lg border border-gray-200 bg-slate-50 p-0.5">
+              <button
+                type="button"
+                onClick={onMoveUp}
+                disabled={isFirst}
+                className="p-1 rounded text-gray-500 hover:text-indigo-600 hover:bg-white disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed transition"
+                title="Di chuyển câu hỏi lên trên"
+              >
+                <ArrowUp className="h-3 w-3" />
+              </button>
+              <button
+                type="button"
+                onClick={onMoveDown}
+                disabled={isLast}
+                className="p-1 rounded text-gray-500 hover:text-indigo-600 hover:bg-white disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed transition"
+                title="Di chuyển câu hỏi xuống dưới"
+              >
+                <ArrowDown className="h-3 w-3" />
+              </button>
+            </div>
+          )}
+
           {/* Question Number Badge */}
           <span className="flex h-7 min-w-7 items-center justify-center rounded-lg bg-indigo-600 px-2 text-xs font-bold text-white shadow-xs">
             Câu {displayNumber}
