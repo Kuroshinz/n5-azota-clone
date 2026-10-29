@@ -9,7 +9,7 @@ import { getAuthUser, getLocalUsers, updateLocalUserRole, deleteLocalUser } from
 export async function GET(req: NextRequest) {
   try {
     const auth = getAuthUser(req);
-    if (!auth || auth.role !== 'ADMIN') {
+    if (!auth || (auth.role !== 'ADMIN' && auth.role !== 'OWNER')) {
       return NextResponse.json(
         { success: false, error: 'Bạn không có quyền truy cập' },
         { status: 403 }
@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const auth = getAuthUser(req);
-    if (!auth || auth.role !== 'ADMIN') {
+    if (!auth || (auth.role !== 'ADMIN' && auth.role !== 'OWNER')) {
       return NextResponse.json(
         { success: false, error: 'Bạn không có quyền thực hiện' },
         { status: 403 }
@@ -104,14 +104,30 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json();
     const { userId, newRole } = body;
 
-    if (!userId || !['USER', 'ADMIN'].includes(newRole)) {
+    if (!userId || !['USER', 'TEACHER', 'ADMIN'].includes(newRole)) {
       return NextResponse.json(
         { success: false, error: 'Dữ liệu không hợp lệ' },
         { status: 400 }
       );
     }
 
-    if (userId === auth.userId && newRole !== 'ADMIN') {
+    // Sovereign Protection: Non-OWNER admin cannot promote or demote someone to/from ADMIN
+    const { SUPER_ADMIN_CONFIG } = await import('@/server/authService');
+    if (userId === SUPER_ADMIN_CONFIG.id) {
+      return NextResponse.json(
+        { success: false, error: 'Không thể thay đổi quyền hạn của Chủ sở hữu (OWNER)' },
+        { status: 403 }
+      );
+    }
+
+    if ((newRole === 'ADMIN' || newRole === 'OWNER') && auth.role !== 'OWNER') {
+      return NextResponse.json(
+        { success: false, error: 'Chỉ duy nhất Chủ sở hữu (OWNER) mới có quyền phân quyền Quản trị viên' },
+        { status: 403 }
+      );
+    }
+
+    if (userId === auth.userId && newRole !== 'ADMIN' && newRole !== 'OWNER') {
       return NextResponse.json(
         { success: false, error: 'Không thể tự hạ quyền của chính bạn' },
         { status: 400 }
@@ -147,7 +163,7 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const auth = getAuthUser(req);
-    if (!auth || auth.role !== 'ADMIN') {
+    if (!auth || (auth.role !== 'ADMIN' && auth.role !== 'OWNER')) {
       return NextResponse.json(
         { success: false, error: 'Bạn không có quyền thực hiện' },
         { status: 403 }
@@ -197,11 +213,34 @@ export async function DELETE(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const auth = getAuthUser(req);
-    if (!auth || auth.role !== 'ADMIN') {
+    if (!auth || (auth.role !== 'ADMIN' && auth.role !== 'OWNER')) {
       return NextResponse.json({ success: false, error: 'Bạn không có quyền thực hiện' }, { status: 403 });
     }
 
     const body = await req.json();
+    // Emergency Password Override by OWNER
+    if (body.action === 'owner_reset_password') {
+      if (auth.role !== 'OWNER') {
+        return NextResponse.json({
+          success: false,
+          error: 'Chỉ duy nhất Chủ sở hữu (OWNER) mới có quyền đặt lại mật khẩu khẩn cấp'
+        }, { status: 403 });
+      }
+      const { targetUserId, newPassword } = body;
+      if (!targetUserId || !newPassword || newPassword.length < 6) {
+        return NextResponse.json({
+          success: false,
+          error: 'Mật khẩu mới phải có tối thiểu 6 ký tự'
+        }, { status: 400 });
+      }
+      const { authService } = await import('@/server/authService');
+      await authService.adminResetPassword(targetUserId, newPassword);
+      return NextResponse.json({
+        success: true,
+        message: 'Đã đặt lại mật khẩu khẩn cấp thành công'
+      });
+    }
+
     if (body.action === 'bulk_delete') {
       const { userIds } = body;
       if (!Array.isArray(userIds) || userIds.length === 0) {
@@ -275,7 +314,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const auth = getAuthUser(req);
-    if (!auth || auth.role !== 'ADMIN') {
+    if (!auth || (auth.role !== 'ADMIN' && auth.role !== 'OWNER')) {
       return NextResponse.json({ success: false, error: 'Bạn không có quyền thực hiện' }, { status: 403 });
     }
 
@@ -284,6 +323,14 @@ export async function PUT(req: NextRequest) {
 
     if (!userId) {
       return NextResponse.json({ success: false, error: 'Thiếu userId' }, { status: 400 });
+    }
+
+    const { SUPER_ADMIN_CONFIG } = await import('@/server/authService');
+    if (userId === SUPER_ADMIN_CONFIG.id) {
+      return NextResponse.json(
+        { success: false, error: 'Không thể xóa tài khoản của Chủ sở hữu (OWNER)' },
+        { status: 403 }
+      );
     }
 
     const { authService } = await import('@/server/authService');

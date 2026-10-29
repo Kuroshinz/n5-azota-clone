@@ -42,7 +42,8 @@ import {
   BarChart3,
   Copy,
   Sliders,
-  Sparkles
+  Sparkles,
+  Crown
 } from 'lucide-react';
 
 type TabType = 'overview' | 'users' | 'exams' | 'submissions' | 'system';
@@ -925,14 +926,14 @@ export default function AdminDashboardPage() {
     );
   }
 
-  if (!user || user.role !== 'ADMIN') {
+  if (!user || (user.role !== 'ADMIN' && user.role !== 'OWNER')) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-6 text-center">
         <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm max-w-md w-full">
           <AlertCircle className="mx-auto mb-3 h-12 w-12 text-rose-500" />
           <h2 className="text-lg font-bold text-gray-900 mb-1">Không có quyền truy cập</h2>
           <p className="text-xs text-gray-500 mb-6">
-            Khu vực này chỉ dành riêng cho Quản trị viên (ADMIN). Vui lòng đăng nhập với tài khoản có thẩm quyền.
+            Khu vực này chỉ dành riêng cho Quản trị viên và Chủ sở hữu (OWNER). Vui lòng đăng nhập với tài khoản có thẩm quyền.
           </p>
           <Link
             href="/"
@@ -961,9 +962,16 @@ export default function AdminDashboardPage() {
                 <h1 className="text-lg sm:text-xl font-black text-gray-900">
                   Trung tâm Quản trị Hệ thống
                 </h1>
-                <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-[10px] font-black uppercase text-purple-700 border border-purple-200">
-                  Admin Master
-                </span>
+                {user?.role === 'OWNER' ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-100 to-yellow-100 px-3 py-0.5 text-[10px] font-black uppercase text-amber-900 border border-amber-300 shadow-xs ring-2 ring-amber-400/20">
+                    <Crown className="w-3.5 h-3.5 text-amber-600 fill-amber-500" />
+                    Chủ Sở Hữu (OWNER)
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-[10px] font-black uppercase text-purple-700 border border-purple-200">
+                    Quản trị viên (Admin)
+                  </span>
+                )}
               </div>
               <p className="text-xs text-gray-500 mt-0.5">
                 Quản lý toàn diện người dùng, đề thi, lượt làm bài và theo dõi vi phạm thi cử
@@ -1074,18 +1082,20 @@ export default function AdminDashboardPage() {
             )}
           </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('system')}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'system'
-                ? 'bg-purple-600 text-white shadow-md shadow-purple-200'
-                : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
-            }`}
-          >
-            <Server className="h-4 w-4" />
-            <span>Hệ thống & Sao lưu</span>
-          </button>
+          {user?.role === 'OWNER' && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('system')}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition whitespace-nowrap cursor-pointer ${
+                activeTab === 'system'
+                  ? 'bg-gradient-to-r from-amber-600 to-yellow-600 text-white shadow-md shadow-amber-200'
+                  : 'bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-200'
+              }`}
+            >
+              <Crown className="h-4 w-4 text-amber-500 fill-amber-500" />
+              <span>Khu vực Chủ Sở Hữu (Sovereign Console)</span>
+            </button>
+          )}
         </div>
 
         {/* TAB 1: OVERVIEW */}

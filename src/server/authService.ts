@@ -17,9 +17,9 @@ export const SUPER_ADMIN_CONFIG: {
   id: 'admin-master-root',
   phone: '0999999999',
   email: 'admin@azota.vn',
-  fullName: 'Quản Trị Viên (Admin Master)',
+  fullName: 'Chủ Sở Hữu Hệ Thống (Owner Master)',
   passwordPlain: 'admin123@Azota',
-  role: 'ADMIN',
+  role: 'OWNER',
 };
 
 export interface UserTokenPayload {
@@ -74,7 +74,7 @@ export function getLocalUsers(): SanitizedUser[] {
       fullName: SUPER_ADMIN_CONFIG.fullName,
       phone: SUPER_ADMIN_CONFIG.phone,
       email: SUPER_ADMIN_CONFIG.email,
-      role: 'ADMIN',
+      role: 'OWNER',
       createdAt: new Date('2026-01-01T00:00:00Z'),
     }
   ];
@@ -109,6 +109,39 @@ export function updateLocalUserRole(userId: string, newRole: string): SanitizedU
 
 export function deleteLocalUser(userId: string): boolean {
   return memoryUsers.delete(userId);
+}
+
+
+// Password recovery OTP store (in-memory with 15 minutes TTL)
+interface PasswordResetOtpEntry {
+  otp: string;
+  identifier: string;
+  expiresAt: number;
+}
+const passwordResetStore = new Map<string, PasswordResetOtpEntry>();
+
+export function createPasswordResetOtp(identifier: string): { otp: string; expiresAt: number } {
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = Date.now() + 15 * 60 * 1000; // 15 mins
+  const cleanId = identifier.trim().toLowerCase();
+  passwordResetStore.set(cleanId, { otp, identifier: cleanId, expiresAt });
+  return { otp, expiresAt };
+}
+
+export function verifyPasswordResetOtp(identifier: string, inputOtp: string): boolean {
+  const cleanId = identifier.trim().toLowerCase();
+  const entry = passwordResetStore.get(cleanId);
+  if (!entry) return false;
+  if (Date.now() > entry.expiresAt) {
+    passwordResetStore.delete(cleanId);
+    return false;
+  }
+  return entry.otp === inputOtp.trim();
+}
+
+export function clearPasswordResetOtp(identifier: string): void {
+  const cleanId = identifier.trim().toLowerCase();
+  passwordResetStore.delete(cleanId);
 }
 
 export class AuthService {
@@ -244,13 +277,13 @@ export class AuthService {
           fullName: SUPER_ADMIN_CONFIG.fullName,
           phone: SUPER_ADMIN_CONFIG.phone,
           email: SUPER_ADMIN_CONFIG.email,
-          role: 'ADMIN',
+          role: SUPER_ADMIN_CONFIG.role,
           createdAt: new Date('2026-01-01T00:00:00Z'),
         };
 
         const token = this.createToken({
           userId: adminUser.id,
-          role: 'ADMIN',
+          role: SUPER_ADMIN_CONFIG.role,
           fullName: adminUser.fullName,
         });
 
@@ -640,6 +673,107 @@ export class AuthService {
     };
   }
 
+    async requestPasswordReset(identifier: string): Promise<{ success: boolean; otp?: string; expiresAt?: number; error?: string }> {
+    const cleanId = identifier.trim().toLowerCase();
+    if (!cleanId) {
+      return { success: false, error: 'Vui lòng nhập số điện thoại hoặc email đã đăng ký' };
+    }
+
+    // 1. Check Super Admin
+    let userFound = cleanId === SUPER_ADMIN_CONFIG.phone || (SUPER_ADMIN_CONFIG.email && cleanId === SUPER_ADMIN_CONFIG.email.toLowerCase());
+
+    // 2. Check Database
+    if (!userFound && isDatabaseConfigured) {
+      try {
+        const dbUser = await prisma.user.findFirst({
+          where: {
+            OR: [
+              { phone: cleanId },
+              { email: cleanId }
+            ]
+          }
+        });
+        if (dbUser) userFound = true;
+      } catch (err: any) {
+        console.warn('Prisma check user for reset failed:', err.message);
+      }
+    }
+
+    // 3. Check memory store
+    if (!userFound) {
+      for (const mem of memoryUsers.values()) {
+        if (mem.phone.toLowerCase() === cleanId || (mem.email && mem.email.toLowerCase() === cleanId)) {
+          userFound = true;
+          break;
+        }
+      }
+    }
+
+    if (!userFound) {
+      return { success: false, error: 'Không tìm thấy tài khoản với số điện thoại hoặc email này' };
+    }
+
+    const { otp, expiresAt } = createPasswordResetOtp(cleanId);
+    return { success: true, otp, expiresAt };
+  }
+
+  async resetPasswordWithOtp(identifier: string, inputOtp: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+    const cleanId = identifier.trim().toLowerCase();
+    if (!cleanId) return { success: false, error: 'Số điện thoại hoặc email không hợp lệ' };
+
+    if (!verifyPasswordResetOtp(cleanId, inputOtp)) {
+      return { success: false, error: 'Mã xác nhận (OTP) không chính xác hoặc đã hết hạn' };
+    }
+
+    if (!newPassword || newPassword.length < 6) {
+      return { success: false, error: 'Mật khẩu mới phải có tối thiểu 6 ký tự' };
+    }
+
+    const newHash = await this.hashPassword(newPassword);
+
+    // 1. Super Admin
+    if (cleanId === SUPER_ADMIN_CONFIG.phone || (SUPER_ADMIN_CONFIG.email && cleanId === SUPER_ADMIN_CONFIG.email.toLowerCase())) {
+      SUPER_ADMIN_CONFIG.passwordPlain = newPassword;
+      clearPasswordResetOtp(cleanId);
+      return { success: true };
+    }
+
+    // 2. Database
+    if (isDatabaseConfigured) {
+      try {
+        const dbUser = await prisma.user.findFirst({
+          where: {
+            OR: [
+              { phone: cleanId },
+              { email: cleanId }
+            ]
+          }
+        });
+        if (dbUser) {
+          await prisma.user.update({
+            where: { id: dbUser.id },
+            data: { passwordHash: newHash }
+          });
+          clearPasswordResetOtp(cleanId);
+          return { success: true };
+        }
+      } catch (err: any) {
+        console.warn('Prisma reset password error:', err.message);
+      }
+    }
+
+    // 3. Memory
+    for (const mem of memoryUsers.values()) {
+      if (mem.phone.toLowerCase() === cleanId || (mem.email && mem.email.toLowerCase() === cleanId)) {
+        mem.passwordHash = newHash;
+        clearPasswordResetOtp(cleanId);
+        return { success: true };
+      }
+    }
+
+    return { success: false, error: 'Không thể cập nhật mật khẩu cho tài khoản' };
+  }
+
   async adminResetPassword(userId: string, newPassword: string): Promise<boolean> {
     if (!newPassword || newPassword.length < 6) {
       throw new Error('Mật khẩu mới phải có tối thiểu 6 ký tự');
@@ -766,3 +900,13 @@ export function getAuthUser(req: any): UserTokenPayload | null {
 export function clearMemoryUsers() { memoryUsers.clear(); }
 
 (globalThis as any).__clearMemoryStores = () => { memoryUsers.clear(); };
+
+export function isOwner(user: UserTokenPayload | null): boolean {
+  if (!user) return false;
+  return user.role === 'OWNER' || user.userId === SUPER_ADMIN_CONFIG.id;
+}
+
+export function isAdminOrOwner(user: UserTokenPayload | null): boolean {
+  if (!user) return false;
+  return user.role === 'ADMIN' || user.role === 'OWNER' || user.userId === SUPER_ADMIN_CONFIG.id;
+}

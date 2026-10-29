@@ -11,7 +11,7 @@ import {
 export async function GET(req: NextRequest) {
   try {
     const auth = getAuthUser(req);
-    if (!auth || auth.role !== 'ADMIN') {
+    if (!auth || (auth.role !== 'ADMIN' && auth.role !== 'OWNER')) {
       return NextResponse.json({ success: false, error: 'Bạn không có quyền truy cập' }, { status: 403 });
     }
 
@@ -119,8 +119,16 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const auth = getAuthUser(req);
-    if (!auth || auth.role !== 'ADMIN') {
+    if (!auth || (auth.role !== 'ADMIN' && auth.role !== 'OWNER')) {
       return NextResponse.json({ success: false, error: 'Bạn không có quyền truy cập' }, { status: 403 });
+    }
+
+    // Sovereign Authority Check: Only OWNER can execute system maintenance, backup restore, or purge
+    if (auth.role !== 'OWNER') {
+      return NextResponse.json({
+        success: false,
+        error: 'Chỉ duy nhất Chủ sở hữu (OWNER) mới có toàn quyền thực hiện các thao tác bảo trì và khôi phục hệ thống'
+      }, { status: 403 });
     }
 
     const body = await req.json().catch(() => ({}));

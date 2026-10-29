@@ -8,6 +8,7 @@ export function middleware(request: NextRequest) {
   if (
     pathname.startsWith('/login') ||
     pathname.startsWith('/register') ||
+    pathname.startsWith('/forgot-password') ||
     pathname.startsWith('/api/auth') ||
     pathname.startsWith('/api/parser') || // allow PDF and document parser APIs
     pathname.startsWith('/exam/') || // allow public exam room & result pages via QR code / link

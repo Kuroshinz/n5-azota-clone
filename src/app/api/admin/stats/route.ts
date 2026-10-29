@@ -10,7 +10,7 @@ import { listExams as listLocalExams, getSubmissions as getLocalSubmissions } fr
 export async function GET(req: NextRequest) {
   try {
     const auth = getAuthUser(req);
-    if (!auth || auth.role !== 'ADMIN') {
+    if (!auth || (auth.role !== 'ADMIN' && auth.role !== 'OWNER')) {
       return NextResponse.json(
         { success: false, error: 'Bạn không có quyền truy cập trang quản trị' },
         { status: 403 }
