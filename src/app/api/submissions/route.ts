@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { examService } from '@/server/examService';
-import { getAuthUser } from '@/server/authService';
+import { getAuthUser, isAdminOrOwner } from '@/server/authService';
 
 export async function GET(request: NextRequest) {
   try {
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
       }
 
       // If caller is the author of the exam: returns all submissions with isAuthor: true
-      if (exam.authorId && exam.authorId === currentUser.userId) {
+      if (exam.authorId && (exam.authorId === currentUser.userId || isAdminOrOwner(currentUser))) {
         const submissions = await examService.getSubmissions(examId);
         return NextResponse.json({ success: true, submissions, isAuthor: true });
       }

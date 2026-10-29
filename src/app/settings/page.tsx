@@ -145,6 +145,14 @@ export default function SettingsPage() {
   }
 
   const roleBadge = () => {
+    if (user.role === 'OWNER') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
+          <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+          Chủ sở hữu hệ thống (Owner)
+        </span>
+      );
+    }
     if (user.role === 'ADMIN') {
       return (
         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200">
@@ -198,7 +206,7 @@ export default function SettingsPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            {user.role === 'ADMIN' && (
+            {(user.role === 'ADMIN' || user.role === 'OWNER') && (
               <Link
                 href="/admin"
                 className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-sm shadow-purple-200 transition flex items-center gap-1.5"

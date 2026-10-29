@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { examService } from '@/server/examService';
-import { getAuthUser } from '@/server/authService';
+import { getAuthUser, isAdminOrOwner } from '@/server/authService';
 
 export async function GET(
   request: NextRequest,
@@ -17,7 +17,7 @@ export async function GET(
     }
 
     const currentUser = getAuthUser(request);
-    const isAuthorOrAdmin = Boolean(currentUser && (currentUser.userId === exam.authorId || currentUser.role === 'ADMIN'));
+    const isAuthorOrAdmin = Boolean(currentUser && (currentUser.userId === exam.authorId || isAdminOrOwner(currentUser)));
 
     // If exam is private and caller is not the author or admin
     if (exam.isPublic === false && !isAuthorOrAdmin) {
@@ -82,7 +82,7 @@ export async function PUT(
     }
 
     // Only author or admin can update the exam
-    const isAuthorized = existing.authorId === currentUser.userId || currentUser.role === 'ADMIN';
+    const isAuthorized = existing.authorId === currentUser.userId || isAdminOrOwner(currentUser);
     if (existing.authorId && !isAuthorized) {
       return NextResponse.json(
         { success: false, error: 'Bạn không có quyền chỉnh sửa đề thi của người khác' },
@@ -121,7 +121,7 @@ export async function DELETE(
     }
 
     // Only author or admin can delete the exam
-    const isAuthorized = existing.authorId === currentUser.userId || currentUser.role === 'ADMIN';
+    const isAuthorized = existing.authorId === currentUser.userId || isAdminOrOwner(currentUser);
     if (existing.authorId && !isAuthorized) {
       return NextResponse.json(
         { success: false, error: 'Bạn không có quyền xóa đề thi của người khác' },
@@ -156,7 +156,7 @@ export async function POST(
     }
 
     // Permission: must be author, admin, or exam is public
-    const isAuthorized = existing.authorId === currentUser.userId || currentUser.role === 'ADMIN' || existing.isPublic !== false;
+    const isAuthorized = existing.authorId === currentUser.userId || isAdminOrOwner(currentUser) || existing.isPublic !== false;
     if (!isAuthorized) {
       return NextResponse.json(
         { success: false, error: 'Bạn không có quyền nhân bản đề thi này' },

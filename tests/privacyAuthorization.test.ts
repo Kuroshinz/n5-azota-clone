@@ -1,3 +1,4 @@
+import { authService, SUPER_ADMIN_CONFIG } from '../src/server/authService';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { POST as registerHandler } from '../src/app/api/auth/register/route';
 import { GET as getExamsHandler, POST as createExamHandler } from '../src/app/api/exams/route';
@@ -193,5 +194,52 @@ describe('Data Privacy & Authorization Isolation', () => {
     expect(studentData.isAuthor).toBe(false);
     expect(studentData.submissions.length).toBe(1);
     expect(studentData.submissions[0].studentName).toBe('Học Sinh C');
+  });
+  it('allows sovereign owner (0999999999 / role: OWNER) to edit and delete any user exam', async () => {
+    // 1. User A creates Exam A
+    await createExamHandler(new NextRequest('http://localhost:3000/api/exams', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        cookie: `azota_token=${userAToken}`
+      },
+      body: JSON.stringify({
+        id: 'exam-priv-owner-test',
+        title: 'TEST_PRIVACY_EXAM_OWNER',
+        questions: [{ id: 1, type: 'multiple_choice', content: 'Q1', options: [{ key: 'A', content: 'Ans' }], correctAnswer: 'A', score: 10 }]
+      })
+    }));
+
+    // 2. Login as Sovereign Owner (0999999999)
+    const { token: ownerToken } = await authService.loginUser(SUPER_ADMIN_CONFIG.phone, SUPER_ADMIN_CONFIG.passwordPlain);
+
+    // 3. Owner updates Exam A -> 200 OK (Allowed!)
+    const resUpdate = await updateExamHandler(
+      new NextRequest('http://localhost:3000/api/exams/exam-priv-owner-test', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          cookie: `azota_token=${ownerToken}`
+        },
+        body: JSON.stringify({ title: 'TEST_PRIVACY_EXAM_OWNER (Updated by Sovereign Owner)' })
+      }),
+      { params: { id: 'exam-priv-owner-test' } }
+    );
+    expect(resUpdate.status).toBe(200);
+    const updateData = await resUpdate.json();
+    expect(updateData.success).toBe(true);
+    expect(updateData.exam.title).toBe('TEST_PRIVACY_EXAM_OWNER (Updated by Sovereign Owner)');
+
+    // 4. Owner deletes Exam A -> 200 OK (Allowed!)
+    const resDelete = await deleteExamHandler(
+      new NextRequest('http://localhost:3000/api/exams/exam-priv-owner-test', {
+        method: 'DELETE',
+        headers: { cookie: `azota_token=${ownerToken}` }
+      }),
+      { params: { id: 'exam-priv-owner-test' } }
+    );
+    expect(resDelete.status).toBe(200);
+    const deleteData = await resDelete.json();
+    expect(deleteData.success).toBe(true);
   });
 });

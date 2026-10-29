@@ -165,7 +165,7 @@ export default function AdminDashboardPage() {
 
   // Redirect non-admin users
   useEffect(() => {
-    if (!authLoading && (!user || user.role !== 'ADMIN')) {
+    if (!authLoading && (!user || (user.role !== 'ADMIN' && user.role !== 'OWNER'))) {
       router.push('/');
     }
   }, [user, authLoading, router]);
@@ -267,7 +267,7 @@ export default function AdminDashboardPage() {
 
   // Switch tabs
   useEffect(() => {
-    if (!user || user.role !== 'ADMIN') return;
+    if (!user || (user.role !== 'ADMIN' && user.role !== 'OWNER')) return;
     if (activeTab === 'overview') loadStats();
     else if (activeTab === 'users') loadUsers();
     else if (activeTab === 'exams') loadExams();

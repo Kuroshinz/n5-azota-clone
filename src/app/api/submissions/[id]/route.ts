@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { examService } from '@/server/examService';
-import { getAuthUser } from '@/server/authService';
+import { getAuthUser, isAdminOrOwner } from '@/server/authService';
 
 export async function GET(
   request: NextRequest,
@@ -21,7 +21,7 @@ export async function GET(
     const currentUser = getAuthUser(request);
 
     const isAuthorOrAdmin = Boolean(
-      currentUser && (currentUser.userId === exam?.authorId || currentUser.role === 'ADMIN')
+      currentUser && (currentUser.userId === exam?.authorId || isAdminOrOwner(currentUser))
     );
     const isOwnerStudent = Boolean(
       currentUser && submission.userId && currentUser.userId === submission.userId

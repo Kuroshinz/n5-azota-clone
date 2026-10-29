@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { examService } from '@/server/examService';
-import { getAuthUser } from '@/server/authService';
+import { getAuthUser, isAdminOrOwner } from '@/server/authService';
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
 
     // 1. Authenticated user viewing their own exam dashboard (Strict Isolation)
     if (currentUser && !isPublicQuery) {
-      if (searchParams.get('all') === 'true' && (currentUser.role === 'ADMIN' || currentUser.role === 'OWNER')) {
+      if (searchParams.get('all') === 'true' && isAdminOrOwner(currentUser)) {
         const exams = await examService.listExams();
         return NextResponse.json({ success: true, exams });
       }
@@ -55,9 +55,10 @@ export async function POST(request: NextRequest) {
 
     if (targetExam) {
       const targetId = targetExam.id;
+      let existing = null;
       if (targetId) {
-        const existing = await examService.getExam(targetId);
-        if (existing && existing.authorId && existing.authorId !== authorId) {
+        existing = await examService.getExam(targetId);
+        if (existing && existing.authorId && existing.authorId !== authorId && !isAdminOrOwner(currentUser)) {
           return NextResponse.json(
             { success: false, error: 'Bạn không có quyền chỉnh sửa đề thi của người khác' },
             { status: 403 }
@@ -65,7 +66,11 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      targetExam.authorId = authorId;
+      if (existing && existing.authorId && isAdminOrOwner(currentUser)) {
+        targetExam.authorId = existing.authorId;
+      } else {
+        targetExam.authorId = authorId;
+      }
       if (targetExam.isPublic === undefined) targetExam.isPublic = true;
       await examService.saveExam(targetExam);
       return NextResponse.json({ success: true, exam: targetExam });

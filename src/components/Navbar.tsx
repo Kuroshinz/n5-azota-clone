@@ -107,7 +107,7 @@ export const Navbar: React.FC<NavbarProps> = ({ examTitle, showLinks = true }) =
               <span className="hidden sm:inline">Tạo đề mới</span>
             </Link>
 
-            {user?.role === 'ADMIN' && (
+            {(user?.role === 'ADMIN' || user?.role === 'OWNER') && (
               <Link
                 href="/admin"
                 className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition shadow-xs ${
@@ -158,7 +158,12 @@ export const Navbar: React.FC<NavbarProps> = ({ examTitle, showLinks = true }) =
                         </div>
 
                         <div className="mt-2.5 flex items-center justify-between">
-                          {user.role === 'ADMIN' ? (
+                          {user.role === 'OWNER' ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                              <ShieldCheck className="h-3 w-3" />
+                              Chủ sở hữu
+                            </span>
+                          ) : user.role === 'ADMIN' ? (
                             <span className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-700 bg-purple-50 border border-purple-100 px-2 py-0.5 rounded-full">
                               <ShieldCheck className="h-3 w-3" />
                               Quản trị viên
@@ -200,7 +205,7 @@ export const Navbar: React.FC<NavbarProps> = ({ examTitle, showLinks = true }) =
                           <span>Cài đặt Ứng dụng (App)</span>
                         </button>
 
-                        {user.role === 'ADMIN' && (
+                        {(user.role === 'ADMIN' || user.role === 'OWNER') && (
                           <Link
                             href="/admin"
                             onClick={() => setDropdownOpen(false)}
