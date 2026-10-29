@@ -26,6 +26,7 @@ export function middleware(request: NextRequest) {
   // - POST /api/submissions (submitting exam answers)
   // - GET /api/submissions/:id (viewing student result report)
   if (
+    (pathname === '/api/exams' && request.method === 'GET') ||
     (pathname.match(/^\/api\/exams\/[^/]+$/) && request.method === 'GET') ||
     (pathname.match(/^\/api\/exams\/[^/]+\/leaderboard$/) && request.method === 'GET') ||
     (pathname === '/api/submissions' && request.method === 'POST') ||

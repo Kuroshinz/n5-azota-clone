@@ -5,13 +5,23 @@ import { getAuthUser } from '@/server/authService';
 export async function GET(request: NextRequest) {
   try {
     const currentUser = getAuthUser(request);
-    if (!currentUser) {
-      return NextResponse.json({ success: true, exams: [] });
+    const { searchParams } = new URL(request.url);
+    const isPublicQuery = searchParams.get('public') === 'true';
+
+    // 1. Authenticated user viewing their own exam dashboard (Strict Isolation)
+    if (currentUser && !isPublicQuery) {
+      if (searchParams.get('all') === 'true' && (currentUser.role === 'ADMIN' || currentUser.role === 'OWNER')) {
+        const exams = await examService.listExams();
+        return NextResponse.json({ success: true, exams });
+      }
+      const exams = await examService.listExams(currentUser.userId);
+      return NextResponse.json({ success: true, exams });
     }
 
-    // Only return exams created by the currently authenticated user
-    const exams = await examService.listExams(currentUser.userId);
-    return NextResponse.json({ success: true, exams });
+    // 2. Unauthenticated visitors, guests, and public browsing: return public exams & demo templates
+    const allExams = await examService.listExams();
+    const publicExams = allExams.filter(e => e.isPublic !== false);
+    return NextResponse.json({ success: true, exams: publicExams });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
