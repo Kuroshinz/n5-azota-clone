@@ -28,6 +28,7 @@ interface QuestionEditorCardProps {
   displayNumber: number;
   onChange: (updated: Question) => void;
   onDelete: () => void;
+  onInsertBelow?: () => void;
 }
 
 const OPTION_KEYS: OptionKey[] = ['A', 'B', 'C', 'D'];
@@ -37,6 +38,7 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
   displayNumber,
   onChange,
   onDelete,
+  onInsertBelow,
 }) => {
   const [showPreview, setShowPreview] = useState(false);
 
@@ -236,6 +238,19 @@ export const QuestionEditorCard: React.FC<QuestionEditorCardProps> = ({
             <Eye className="h-3.5 w-3.5" />
             <span>{showPreview ? 'Đóng xem trước' : 'Xem trước'}</span>
           </button>
+
+          {/* Insert Below Question Button */}
+          {onInsertBelow && (
+            <button
+              type="button"
+              onClick={onInsertBelow}
+              className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 transition cursor-pointer"
+              title="Chèn một câu hỏi mới ngay bên dưới câu này"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Chèn câu dưới</span>
+            </button>
+          )}
 
           {/* Delete Question */}
           <button

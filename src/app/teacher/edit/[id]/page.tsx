@@ -131,17 +131,12 @@ export default function EditExamPage() {
     setQuestions(next);
   };
 
-  const handleDeleteQuestion = (index: number) => {
-    const next = questions.filter((_, idx) => idx !== index);
-    setQuestions(next);
-  };
-
-  const handleAddQuestion = () => {
-    const newId = (questions[questions.length - 1]?.id ?? 0) + 1;
+  // Insert a new question at any specific position (at beginning, between questions, or at end)
+  const handleInsertQuestion = (insertIndex: number) => {
     const newQ: Question = {
-      id: newId,
+      id: Date.now(),
       type: 'multiple_choice',
-      rawText: `Câu ${newId}: `,
+      rawText: `Câu ${insertIndex + 1}: `,
       content: '',
       score: 0.25,
       options: [
@@ -152,7 +147,34 @@ export default function EditExamPage() {
       ],
       correctAnswer: 'A',
     };
-    setQuestions([...questions, newQ]);
+
+    const next = [...questions];
+    next.splice(insertIndex, 0, newQ);
+
+    // Re-index question IDs and headers sequentially
+    const reindexed = next.map((q, idx) => ({
+      ...q,
+      id: idx + 1,
+      rawText: q.rawText ? q.rawText.replace(/^(?:Câu|Bài|Question)\s*\d+/i, `Câu ${idx + 1}`) : `Câu ${idx + 1}: `,
+    }));
+
+    setQuestions(reindexed);
+    setNormalizeToast(`Đã chèn câu hỏi mới vào vị trí Câu ${insertIndex + 1}!`);
+    setTimeout(() => setNormalizeToast(null), 2500);
+  };
+
+  const handleDeleteQuestion = (index: number) => {
+    const next = questions.filter((_, idx) => idx !== index);
+    const reindexed = next.map((q, idx) => ({
+      ...q,
+      id: idx + 1,
+      rawText: q.rawText ? q.rawText.replace(/^(?:Câu|Bài|Question)\s*\d+/i, `Câu ${idx + 1}`) : `Câu ${idx + 1}: `,
+    }));
+    setQuestions(reindexed);
+  };
+
+  const handleAddQuestion = () => {
+    handleInsertQuestion(questions.length);
   };
 
   // Batch normalize all questions to standard A-B-C-D format
@@ -160,7 +182,7 @@ export default function EditExamPage() {
     if (questions.length === 0) return;
     const normalized = normalizeExamQuestions(questions);
     setQuestions(normalized);
-    setNormalizeToast(`?? t? ??ng chu?n h?a ${normalized.length} c?u h?i th?nh c?ng!`);
+    setNormalizeToast(`Đã tự động chuẩn hóa ${normalized.length} câu hỏi thành công!`);
     setTimeout(() => setNormalizeToast(null), 3000);
   };
 
@@ -665,23 +687,57 @@ export default function EditExamPage() {
             <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider">
               Nội dung câu hỏi ({questions.length})
             </h2>
-            <button
-              onClick={handleAddQuestion}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 transition shadow-sm"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              <span>Thêm câu hỏi mới</span>
-            </button>
+            <div className="flex items-center gap-2">
+              {questions.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => handleInsertQuestion(0)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition shadow-2xs"
+                  title="Chèn một câu hỏi mới lên đầu đề thi (Câu 1)"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Chèn lên đầu</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleAddQuestion}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 transition shadow-sm"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Thêm câu hỏi cuối</span>
+              </button>
+            </div>
           </div>
 
           {questions.map((q, idx) => (
-            <QuestionEditorCard
-              key={q.id || idx}
-              displayNumber={idx + 1}
-              question={q}
-              onChange={(updated) => handleQuestionChange(idx, updated)}
-              onDelete={() => handleDeleteQuestion(idx)}
-            />
+            <React.Fragment key={q.id || idx}>
+              {/* Insertion Separator Between Questions */}
+              {idx > 0 && (
+                <div className="group relative my-3 flex items-center justify-center py-1">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-dashed border-gray-200 transition-colors group-hover:border-indigo-400" />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleInsertQuestion(idx)}
+                    className="relative z-10 flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3.5 py-1 text-[11px] font-bold text-gray-500 shadow-2xs transition-all hover:scale-105 hover:border-indigo-500 hover:bg-indigo-600 hover:text-white cursor-pointer group-hover:border-indigo-300 group-hover:text-indigo-600"
+                    title={`Chèn một câu hỏi mới vào giữa Câu ${idx} và Câu ${idx + 1}`}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Chèn câu hỏi vào đây (vị trí Câu ${idx + 1})</span>
+                  </button>
+                </div>
+              )}
+
+              <QuestionEditorCard
+                displayNumber={idx + 1}
+                question={q}
+                onChange={(updated) => handleQuestionChange(idx, updated)}
+                onDelete={() => handleDeleteQuestion(idx)}
+                onInsertBelow={() => handleInsertQuestion(idx + 1)}
+              />
+            </React.Fragment>
           ))}
 
           {questions.length === 0 && (

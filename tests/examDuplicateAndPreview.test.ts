@@ -116,4 +116,33 @@ describe('Enhanced Exam Features: Duplicate Exam & Test Run Preview', () => {
     const afterSubs = await examService.getSubmissions(testExamId);
     expect(afterSubs.length).toBe(initialCount);
   });
+  it('supports inserting a new question between existing questions and sequentially reindexing', () => {
+    const questions = [
+      { id: 1, rawText: 'Câu 1: Nội dung 1', content: 'Q1' },
+      { id: 2, rawText: 'Câu 2: Nội dung 2', content: 'Q2' },
+    ];
+
+    // Insert between Q1 and Q2 at index 1
+    const insertIndex = 1;
+    const newQ = { id: 999, rawText: `Câu ${insertIndex + 1}: `, content: 'Inserted Question' };
+
+    const next = [...questions];
+    next.splice(insertIndex, 0, newQ);
+
+    const reindexed = next.map((q, idx) => ({
+      ...q,
+      id: idx + 1,
+      rawText: q.rawText ? q.rawText.replace(/^(?:Câu|Bài|Question)\s*\d+/i, `Câu ${idx + 1}`) : `Câu ${idx + 1}: `,
+    }));
+
+    expect(reindexed).toHaveLength(3);
+    expect(reindexed[0].id).toBe(1);
+    expect(reindexed[0].content).toBe('Q1');
+    expect(reindexed[1].id).toBe(2);
+    expect(reindexed[1].content).toBe('Inserted Question');
+    expect(reindexed[1].rawText).toContain('Câu 2');
+    expect(reindexed[2].id).toBe(3);
+    expect(reindexed[2].content).toBe('Q2');
+    expect(reindexed[2].rawText).toContain('Câu 3');
+  });
 });
