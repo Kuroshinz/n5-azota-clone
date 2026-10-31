@@ -90,6 +90,20 @@ describe('Formula & Character Fixer (Resolving KaTeX \\text{CO_2} parse errors)'
     expect(fixedQ.explanation).toContain('$\\mathrm{O_2}$');
   });
 
+  it('formats chemistry written with LaTeX subscripts or braces (CO_{2}, H_2SO_4, Fe(OH)_{3})', () => {
+    const fixed = normalizeMathFormulas('Khí CO_{2}, axit H_2SO_4 và kết tủa Fe(OH)_{3}');
+
+    expect(fixed).toContain('$\\mathrm{CO_2}$');
+    expect(fixed).toContain('$\\mathrm{H_2SO_4}$');
+    expect(fixed).toContain('$\\mathrm{Fe(OH)_3}$');
+  });
+
+  it('formats chemistry inside math mode without double-wrapping', () => {
+    expect(sanitizeLatexFormula('CO_{2} + H_2O')).toBe('\\mathrm{CO_2} + \\mathrm{H_2O}');
+    expect(sanitizeLatexFormula('\\text{CO_{2}}')).toBe('\\mathrm{CO_2}');
+    expect(sanitizeLatexFormula('\\mathrm{CO_2}')).toBe('\\mathrm{CO_2}');
+  });
+
   it('batch fixes entire exam question list with fixExamQuestionsCharacters', () => {
     const questions: Question[] = [
       {

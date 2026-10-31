@@ -59,7 +59,7 @@ describe('wordExtractor: convertDocxHtmlToExamText', () => {
       <p>B. 340 độ C</p>
     `;
     const result = convertDocxHtmlToExamText(html);
-    expect(result.text).toContain('| Nhiệt độ (°C) | [H_{2}] (mol/L) | Kc |');
+    expect(result.text).toContain('| Nhiệt độ (°C) | [$\\mathrm{H_2}$] (mol/L) | Kc |');
     expect(result.text).toContain('| :--- | :--- | :--- |');
     expect(result.text).toContain('| 25 | 0,0355 | 50 |');
     expect(result.text).toContain('| 340 | 0,0380 | 9,6 |');

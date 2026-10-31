@@ -1,4 +1,4 @@
-﻿import { Question } from '../types/exam';
+import { Question } from '../types/exam';
 
 /**
  * Universal Math, Physics, and Chemistry Formula Normalizer
@@ -19,17 +19,124 @@ export function formatChemicalFormula(formula: string): string {
   return `\\mathrm{${latexSub}}`;
 }
 
+/** All IUPAC element symbols, used to validate chemistry candidates. */
+const CHEMICAL_ELEMENTS = new Set([
+  'H', 'He', 'Li', 'Be', 'B', 'C', 'N', 'O', 'F', 'Ne', 'Na', 'Mg', 'Al', 'Si', 'P', 'S',
+  'Cl', 'Ar', 'K', 'Ca', 'Sc', 'Ti', 'V', 'Cr', 'Mn', 'Fe', 'Co', 'Ni', 'Cu', 'Zn', 'Ga',
+  'Ge', 'As', 'Se', 'Br', 'Kr', 'Rb', 'Sr', 'Y', 'Zr', 'Nb', 'Mo', 'Tc', 'Ru', 'Rh', 'Pd',
+  'Ag', 'Cd', 'In', 'Sn', 'Sb', 'Te', 'I', 'Xe', 'Cs', 'Ba', 'La', 'Ce', 'Pr', 'Nd', 'Pm',
+  'Sm', 'Eu', 'Gd', 'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu', 'Hf', 'Ta', 'W', 'Re', 'Os',
+  'Ir', 'Pt', 'Au', 'Hg', 'Tl', 'Pb', 'Bi', 'Po', 'At', 'Rn', 'Fr', 'Ra', 'Ac', 'Th', 'Pa',
+  'U', 'Np', 'Pu', 'Am', 'Cm', 'Bk', 'Cf', 'Es', 'Fm', 'Md', 'No', 'Lr', 'Rf', 'Db', 'Sg',
+  'Bh', 'Hs', 'Mt', 'Ds', 'Rg', 'Cn', 'Nh', 'Fl', 'Mc', 'Lv', 'Ts', 'Og',
+]);
+
+/** A single-element molecule that still deserves a subscript. */
+const SINGLE_ELEMENT_MOLECULES = /^(?:H2|O2|N2|Cl2|F2|O3)$/;
+
+/**
+ * Matches chemistry candidates written with plain digits (CO2), LaTeX subscripts
+ * (CO_2) or braces (CO_{2}, H_{2}SO_{4}, Ca(OH)_{2}).
+ */
+const CHEMICAL_FORMULA_TOKEN =
+  /(?<![A-Za-z0-9_\\])((?:[A-Z][a-z]?(?:\d+|_\d+|_\{[0-9]+\})?|\((?:[A-Z][a-z]?(?:\d+|_\d+|_\{[0-9]+\})?)+\)(?:\d+|_\d+|_\{[0-9]+\})?)+)(?![A-Za-z0-9_])/g;
+
+/** Removes LaTeX subscript markup: "CO_{2}" -> "CO2", "H_2SO_4" -> "H2SO4". */
+function stripSubscriptMarkup(formula: string): string {
+  return formula.replace(/_\{\s*(\d+)\s*\}/g, '$1').replace(/_(\d+)/g, '$1');
+}
+
+/**
+ * Validates that a candidate string is a real chemical formula made only of
+ * known element symbols, digits and balanced parentheses.
+ */
+function isChemicalFormula(formula: string): boolean {
+  if (!formula) return false;
+  const normalized = stripSubscriptMarkup(formula);
+  if (!/^[A-Za-z0-9()]+$/.test(normalized) || !/\d/.test(normalized)) return false;
+
+  const tokens = normalized.match(/[A-Z][a-z]?|\d+|[()]/g);
+  if (!tokens || tokens.join('') !== normalized) return false;
+
+  let elementCount = 0;
+  let upperCaseRun = 0;
+  let balance = 0;
+
+  for (const token of tokens) {
+    if (/^\d+$/.test(token)) {
+      upperCaseRun = 0;
+      continue;
+    }
+    if (token === '(') {
+      balance++;
+      upperCaseRun = 0;
+      continue;
+    }
+    if (token === ')') {
+      balance--;
+      if (balance < 0) return false;
+      continue;
+    }
+    if (!CHEMICAL_ELEMENTS.has(token)) return false;
+    elementCount++;
+    upperCaseRun++;
+    // Rejects uppercase acronyms such as "USB3"
+    if (upperCaseRun > 2) return false;
+  }
+
+  if (balance !== 0) return false;
+  return elementCount >= 2 || SINGLE_ELEMENT_MOLECULES.test(normalized);
+}
+
+/** Returns true when the position sits inside a LaTeX command argument, e.g. \mathrm{... or \frac{... */
+function isInsideLatexCommand(text: string, index: number): boolean {
+  const before = text.slice(0, index);
+  return /\\[A-Za-z]+\*?\s*(?:\[[^\]]*\])?\s*\{[^{}]*$/.test(before);
+}
+
+/**
+ * Wraps every unwrapped chemical formula in math delimiters.
+ * e.g. "CO_{2}" -> "$\mathrm{CO_2}$", "H_{2}SO_{4}" -> "$\mathrm{H_2SO_4}$"
+ */
+function convertChemistryOutsideMath(text: string): string {
+  return text.replace(CHEMICAL_FORMULA_TOKEN, (match, _group, offset: number, source: string) => {
+    const before = source.slice(0, offset);
+    const dollarCount = (before.match(/\$/g) || []).length;
+    // Inside $...$ or $$...$$ -> left to sanitizeLatexFormula
+    if (dollarCount % 2 === 1) return match;
+    // Already part of another LaTeX command argument
+    if (isInsideLatexCommand(source, offset)) return match;
+    if (!isChemicalFormula(match)) return match;
+    return `$${formatChemicalFormula(stripSubscriptMarkup(match))}$`;
+  });
+}
+
 /**
  * Sanitizes LaTeX formulas before rendering in KaTeX.
  * Resolves KaTeX parse error: "Expected 'EOF', got '_' at position ... \text{CO_2}"
  * by converting invalid text-mode subscripts \text{..._...} into valid Roman math \mathrm{..._...}
+ * and also formats chemical formulas written inside math mode (CO_{2}, H_2SO_4).
  */
 export function sanitizeLatexFormula(formula: string): string {
   if (!formula) return '';
   let f = formula;
 
+  // Convert chemical formulas inside \text{...} (e.g. \text{CO_{2}}) into \mathrm{...}
+  f = f.replace(/\\text\{((?:[^{}]|\{[0-9]+\})+)\}/g, (match, inner: string) => {
+    const normalized = stripSubscriptMarkup(inner);
+    if (!/^[A-Za-z0-9()]+$/.test(normalized) || !/\d/.test(normalized)) return match;
+    return isChemicalFormula(normalized) ? formatChemicalFormula(normalized) : match;
+  });
+
   // Convert any \text{..._...} or \text{...^...} into \mathrm{...}
   f = f.replace(/\\text\{([A-Za-z0-9_\^\(\)]*[_^][A-Za-z0-9_\^\(\)]*)\}/g, '\\mathrm{$1}');
+
+  // Bare chemical formulas inside math mode (e.g. $CO_{2}$, $H_2SO_4$) -> \mathrm{...}
+  f = f.replace(CHEMICAL_FORMULA_TOKEN, (match, _group, offset: number, source: string) => {
+    if (isInsideLatexCommand(source, offset)) return match;
+    if (!isChemicalFormula(match)) return match;
+    return formatChemicalFormula(stripSubscriptMarkup(match));
+  });
 
   return f;
 }
@@ -119,20 +226,16 @@ export function normalizeMathFormulas(rawText: string): string {
     return `$\\mathrm{${elem}_${num}}$`;
   });
 
-  // 8. Chemistry Formulas: Automatic subscripts for common chemical compounds
-  const CHEM_REGEX = /\b(H2SO4|HNO3|HCl|H2O|CO2|SO2|SO3|CaCO3|BaSO4|Fe3O4|Fe2O3|FeO|CuSO4|KMnO4|Al2O3|NaOH|KOH|Ca\(OH\)2|Ba\(OH\)2|Na2CO3|NaHCO3|CH4|C2H4|C2H2|C6H6|C2H5OH|CH3COOH|NaCl|O2|N2|H2|Cl2|Fe\(OH\)3|Fe\(OH\)2|Al\(OH\)3|Al2\(SO4\)3|Fe2\(SO4\)3|FeSO4|Cu\(OH\)2)\b/g;
+  // 8. Chemistry Formulas: Automatic subscripts for any valid formula
+  //    (CO2, CO_2, CO_{2}, H2SO4, H_2SO_4, Ca(OH)2, Fe(OH)_{3}, ...)
+  text = convertChemistryOutsideMath(text);
 
-  text = text.replace(CHEM_REGEX, (match, _p1, offset, str) => {
-    const before = str.slice(0, offset);
-    const dollarCount = (before.match(/\$/g) || []).length;
-    if (dollarCount % 2 === 1) return match;
-    if (/\\(?:text|mathrm|mathbf)\s*\{[^}]*$/.test(before)) return match;
-
-    const formatted = formatChemicalFormula(match);
-    return `$${formatted}$`;
+  // 9. Fix broken \text{CO_2} / \text{CO_{2}} / \text{O_2} where the subscript sits inside \text{...}
+  text = text.replace(/\\text\{((?:[^{}]|\{[0-9]+\})+)\}/g, (match, inner: string) => {
+    const normalized = stripSubscriptMarkup(inner);
+    if (!/^[A-Za-z0-9()]+$/.test(normalized) || !/\d/.test(normalized)) return match;
+    return isChemicalFormula(normalized) ? formatChemicalFormula(normalized) : match;
   });
-
-  // 9. Fix broken \text{CO_2} or \text{O_2} where subscript was placed inside \text{...} -> convert to \mathrm{...}
   text = text.replace(/\\text\{([A-Za-z0-9_\^\(\)]*[_^][A-Za-z0-9_\^\(\)]*)\}/g, '\\mathrm{$1}');
 
   // 10. Wrap unwrapped chemical formulas or LaTeX commands sitting in plain text outside $...$
@@ -161,6 +264,9 @@ export function hasFormulaOrCharacterIssue(text: string): boolean {
   if (/(?<!\$)\\(?:text|mathrm)\{[A-Za-z0-9_\^\(\)]+\}(?!\$)/.test(text)) return true;
   // Has unicode chemical subscripts e.g. CO₂, O₂
   if (/\b[A-Z][A-Za-z\(\)]*[\u2080-\u2089]+/.test(text)) return true;
+  // Has chemistry formulas with braces/underscores (CO_{2}, H_2SO_4) outside $
+  if (convertChemistryOutsideMath(text) !== text) return true;
+
   // Has raw chemistry formulas e.g. CO2, H2O, O2 outside $
   const CHEM_CHECK = /\b(H2SO4|HNO3|H2O|CO2|SO2|SO3|CaCO3|Fe3O4|Fe2O3|Al2O3|O2|N2|H2|Cl2)\b/;
   if (CHEM_CHECK.test(text)) {

@@ -324,4 +324,86 @@ Giải thích: Tệp sẽ được giữ trong Thùng rác 30 ngày trước khi
     expect(tfQuestion.explanation).toContain('a) Đúng theo chính sách hiện hành của Google.');
     expect(tfQuestion.explanation).toContain('b) Người dùng hoàn toàn có thể phân quyền Viewer');
   });
+
+  it('keeps questions in document order and strips PHẦN headings from content/options', () => {
+    const rawExam = `PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn
+Câu 1: Khí CO_{2} được sinh ra trong quá trình nào sau đây?
+A. Quang hợp
+B. Hô hấp
+C. Nung đá vôi
+D. Điện phân nước
+Đáp án: B
+
+PHẦN II. Câu trắc nghiệm đúng sai
+Câu 2: Cho các phát biểu về H_{2}SO_{4}:
+a) H_{2}SO_{4} là axit mạnh.
+b) H_{2}SO_{4} loãng có tính oxi hóa mạnh.
+c) H_{2}SO_{4} đặc háo nước.
+d) H_{2}SO_{4} tác dụng với Cu ở nhiệt độ thường.
+Đáp án: a) Đ, b) S, c) Đ, d) S
+
+PHẦN III. Câu trắc nghiệm trả lời ngắn
+Câu 3: Thể tích khí CO_{2} (đktc) thu được khi đốt cháy 0,1 mol C là bao nhiêu lít?
+Đáp số: 2,24`;
+
+    const exam = parseExamText(rawExam);
+
+    expect(exam.questions.map((q) => q.type)).toEqual(['multiple_choice', 'true_false', 'short_answer']);
+    expect(exam.questions[0].options[3].content).toBe('Điện phân nước');
+    expect(exam.questions[1].subItems).toHaveLength(4);
+    expect(exam.questions[1].subItems?.[3].content).toBe(
+      '$\\mathrm{H_2SO_4}$ tác dụng với Cu ở nhiệt độ thường.'
+    );
+    expect(exam.questions[1].subItems?.[3].correctAnswer).toBe(false);
+    expect(exam.questions[2].content).not.toContain('PHẦN');
+    expect(exam.questions[2].acceptedAnswers).toContain('2,24');
+  });
+
+  it('splits A/B/C/D options written on a single line (single or multiple spaces)', () => {
+    const rawExam = `Câu 1: Số nào là số nguyên tố?
+A. 4 B. 5 C. 6 D. 8
+Đáp án: B
+
+Câu 2: Thủ đô của Việt Nam là gì?
+A. Hà Nội     B. Huế     C. Đà Nẵng     D. TP. HCM
+Đáp án: A`;
+
+    const exam = parseExamText(rawExam);
+
+    expect(exam.questions).toHaveLength(2);
+    expect(exam.questions[0].options.map((o) => o.content)).toEqual(['4', '5', '6', '8']);
+    expect(exam.questions[0].correctAnswer).toBe('B');
+    expect(exam.questions[1].options.map((o) => o.content)).toEqual([
+      'Hà Nội',
+      'Huế',
+      'Đà Nẵng',
+      'TP. HCM',
+    ]);
+    expect(exam.questions[1].correctAnswer).toBe('A');
+  });
+
+  it('does not split normal prose mentioning isolated option letters', () => {
+    const rawExam = `Câu 1: Thí nghiệm trên hai cây A và B cho kết quả khác nhau.
+A. Kết quả 1
+B. Kết quả 2
+C. Kết quả 3
+D. Kết quả 4
+Đáp án: C`;
+
+    const exam = parseExamText(rawExam);
+    expect(exam.questions[0].content).toContain('hai cây A và B');
+    expect(exam.questions[0].options).toHaveLength(4);
+  });
+
+  it('detects Part II true/false questions even when the answer key line is missing', () => {
+    const rawExam = `Câu 1: Cho các phát biểu sau:
+a) Mệnh đề thứ nhất.
+b) Mệnh đề thứ hai.
+c) Mệnh đề thứ ba.
+d) Mệnh đề thứ tư.`;
+
+    const exam = parseExamText(rawExam);
+    expect(exam.questions[0].type).toBe('true_false');
+    expect(exam.questions[0].subItems).toHaveLength(4);
+  });
 });

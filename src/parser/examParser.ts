@@ -26,6 +26,86 @@ import { normalizeMathFormulas } from './mathConverter';
 
 const OPTION_KEYS: OptionKey[] = ['A', 'B', 'C', 'D'];
 
+/** "PHẦN I. ...", "PHẦN II: ...", "PART III ...", "I. TRẮC NGHIỆM ..." */
+const PART_HEADING_REGEX =
+  /^[ \t]*(?:(?:PHẦN|PHAN|PART)\s+(?:I{1,3}|IV|V|\d+)\b|(?:I{1,3}|IV)\.\s*(?:TRẮC|PHẦN|CÂU HỎI|BÀI))[^\n]*$/i;
+/** End-of-exam markers such as "HẾT", "---", "***" */
+const END_MARKER_REGEX = /^[ \t]*(?:HẾT|--+|__+|\*{3,})[ \t]*$/i;
+
+/**
+ * Removes section headings (PHẦN I/II/III) and end markers from a question block,
+ * so they do not leak into the previous question's content or last option.
+ */
+function stripSectionHeadings(text: string): string {
+  if (!text) return '';
+  return text
+    .split(/\r?\n/)
+    .filter((line) => !PART_HEADING_REGEX.test(line) && !END_MARKER_REGEX.test(line))
+    .join('\n')
+    .trim();
+}
+
+/** Matches an option label: "A.", "A)", "(A)", "[A]", optionally marked with "*" for the correct answer. */
+const INLINE_OPTION_MARKER = /\*?(?:[A-D][.):]|\([A-D]\)|\[[A-D]\])/g;
+
+/**
+ * Splits choices written on a single line into separate lines.
+ * e.g. "A. 1  B. 2  C. 3  D. 4" -> four lines
+ * e.g. "A. Hà Nội B. Huế C. Đà Nẵng D. TP. HCM" -> four lines
+ * Only lines with a full sequential run A, B, C... are touched, so normal prose
+ * such as "ion A: môi trường đất" is preserved.
+ */
+export function normalizeInlineChoiceLines(text: string): string {
+  if (!text) return '';
+
+  return text
+    .split(/\r?\n/)
+    .map((line) => {
+      // Do not touch empty lines or Markdown table rows
+      if (!line.trim() || line.trimStart().startsWith('|')) return line;
+
+      const marks: { start: number; end: number; raw: string; letter: string; expected: string }[] = [];
+      const markerRegex = new RegExp(INLINE_OPTION_MARKER.source, 'g');
+      let markMatch: RegExpExecArray | null;
+
+      while ((markMatch = markerRegex.exec(line)) !== null) {
+        const prevChar = markMatch.index === 0 ? '' : line[markMatch.index - 1];
+        if (prevChar && !/[\s;,]/.test(prevChar)) continue;
+
+        const letterMatch = markMatch[0].match(/[A-D]/);
+        if (!letterMatch) continue;
+
+        const end = markMatch.index + markMatch[0].length;
+        // An option label must be followed by the option text, never by end of line
+        // (prevents prose ending with "... cây A và B." from being split)
+        if (end >= line.length || !/\s/.test(line[end])) continue;
+
+        marks.push({
+          start: markMatch.index,
+          end,
+          raw: markMatch[0],
+          letter: letterMatch[0],
+          expected: ['A', 'B', 'C', 'D'][marks.length],
+        });
+      }
+
+      // Need at least 2 labels, in exact A, B, C, D order
+      if (marks.length < 2 || marks.length > 4) return line;
+      if (marks.some((mark) => mark.letter !== mark.expected)) return line;
+
+      let result = '';
+      let lastIndex = 0;
+      for (const mark of marks) {
+        result += line.slice(lastIndex, mark.start).replace(/[ \t]+$/, '');
+        if (result.trim().length > 0) result += '\n';
+        result += mark.raw;
+        lastIndex = mark.end;
+      }
+      return result + line.slice(lastIndex);
+    })
+    .join('\n');
+}
+
 export function normalizeQuestion(q: Question): Question {
   const updated: Question = { ...q };
 
@@ -98,8 +178,8 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
     };
   }
 
-  // Step 1: Normalize formulas
-  let text = normalizeMathFormulas(rawText.trim());
+  // Step 1: Normalize formulas and split inline options ("A. ... B. ... C. ... D. ...")
+  let text = normalizeInlineChoiceLines(normalizeMathFormulas(rawText.trim()));
 
   // Step 2: Extract document title if not explicitly provided
   let detectedTitle = metadata?.title;
@@ -185,6 +265,9 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
     let acceptedAnswers: string[] | undefined = undefined;
     let subItems: SubQuestionItem[] | undefined = undefined;
 
+    // Remove section headings (PHẦN I/II/III, HẾT, ...) so they don't stick to content
+    blockContent = stripSectionHeadings(blockContent);
+
     // Remove the leading "Câu X:", "Bài X." header
     const headerPrefixMatch = blockContent.match(/^(?:Câu|Bài|Question)\s*\d+[\s.:]+\s*/i);
     if (headerPrefixMatch) {
@@ -193,37 +276,46 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
 
     // Step A: Check for Part II True/False sub-items BEFORE slicing out explanations!
     const subItemRegex = /(?:^|\n|\t|\s{2,})([a-d])[\s.:\)]+\s*/g;
-    const subMatches: { index: number; length: number; key: 'a' | 'b' | 'c' | 'd' }[] = [];
-    let subMatch: RegExpExecArray | null;
-
-    while ((subMatch = subItemRegex.exec(blockContent)) !== null) {
-      if (isInsideMarkdownTable(blockContent, subMatch.index)) continue;
-      subMatches.push({
-        index: subMatch.index,
-        length: subMatch[0].length,
-        key: subMatch[1].toLowerCase() as 'a' | 'b' | 'c' | 'd',
-      });
-    }
+    const collectSubMatches = () => {
+      const found: { index: number; length: number; key: 'a' | 'b' | 'c' | 'd' }[] = [];
+      const re = new RegExp(subItemRegex.source, 'g');
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(blockContent)) !== null) {
+        if (isInsideMarkdownTable(blockContent, m.index)) continue;
+        found.push({
+          index: m.index,
+          length: m[0].length,
+          key: m[1].toLowerCase() as 'a' | 'b' | 'c' | 'd',
+        });
+      }
+      return found;
+    };
+    let subMatches = collectSubMatches();
 
     // Check if the block has True/False answer markers (e.g. "[ĐÚNG]", "[SAI]", "Đáp án: a) Đ", etc.)
     const hasTfIndicators = /(?:\[\s*(?:ĐÚNG|SAI|TRUE|FALSE|Đ|S)\s*\]|[→\-—\:]\s*(?:ĐÚNG|SAI|TRUE|FALSE)|(?:Đáp án|Key)[\s.:]+[a-d][\s.:\)\-_]+[ĐS])/i.test(blockContent);
+
+    // Part II questions always carry 4 statements a) b) c) d); Part I uses uppercase A-D options
+    const hasFourSubItems = ['a', 'b', 'c', 'd'].every((k) => subMatches.some((m) => m.key === k));
+    const hasUppercaseOptionLines = /^[ \t]*[A-D][\s.:)\-]+/m.test(blockContent);
+    const isTrueFalse = subMatches.length >= 2 && (hasTfIndicators || (hasFourSubItems && !hasUppercaseOptionLines));
 
     let questionType: QuestionType = 'multiple_choice';
     let questionContent = '';
     const options: Option[] = [];
 
-    if (subMatches.length >= 2 && hasTfIndicators) {
+    if (isTrueFalse) {
       // Recognized as Part II True/False
       questionType = 'true_false';
-      questionContent = blockContent.substring(0, subMatches[0].index).trim();
       subItems = [];
       const tfExplanations: string[] = [];
 
       // Parse external answer line if present (e.g. "Đáp án: a) Đ, b) S, c) Đ, d) S")
+      // and remove it from the block BEFORE splitting sub-items so it never leaks into item d)
       const tfAnswersMap = new Map<string, boolean>();
-      const ansMatch = blockContent.match(/(?:^|\n)(?:Đáp án|Đáp số|Chọn|Key|Kết quả|ĐA)[\s.:]+([^\n\r]+)/i);
-      if (ansMatch) {
-        const tfRegex = /([a-d])[\s.:\)\-_]+([ĐS]|Đúng|Sai|True|False)(?=[,\s;]|$)/gi;
+      const ansMatch = blockContent.match(/(?:^|\n)[ \t]*(?:Đáp án|Đáp số|Chọn|Key|Kết quả|ĐA)[\s.:]+([^\n\r]+)/i);
+      if (ansMatch && ansMatch.index !== undefined) {
+        const tfRegex = /([a-d])[\s.:\)\-_]+([ĐS]|Đúng|Sai|True|False)(?=[,\s;.]|$)/gi;
         let tfM: RegExpExecArray | null;
         while ((tfM = tfRegex.exec(ansMatch[1])) !== null) {
           const k = tfM[1].toLowerCase();
@@ -231,7 +323,11 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
           const isTrue = v === 'Đ' || v === 'ĐÚNG' || v === 'TRUE';
           tfAnswersMap.set(k, isTrue);
         }
+        blockContent = (blockContent.substring(0, ansMatch.index) + blockContent.substring(ansMatch.index + ansMatch[0].length)).trim();
+        subMatches = collectSubMatches();
       }
+
+      questionContent = subMatches.length > 0 ? blockContent.substring(0, subMatches[0].index).trim() : blockContent.trim();
 
       for (let j = 0; j < subMatches.length; j++) {
         const curr = subMatches[j];
@@ -270,14 +366,14 @@ export function parseExamText(rawText: string, metadata?: Partial<Exam>): Exam {
       }
     } else {
       // Step B: For Part I Multiple Choice and Part III Short Answer
-      const expMatch = blockContent.match(/(?:^|\n)(?:Lời giải(?:\s+chi\s+tiết)?|Hướng dẫn giải|Giải thích|HDG)[\s.:]+([\s\S]*)$/i);
+      const expMatch = blockContent.match(/(?:^|\n)[ \t]*(?:Lời giải(?:\s+chi\s+tiết)?|Hướng dẫn giải|Giải thích|HDG)[\s.:]+([\s\S]*)$/i);
       if (expMatch && expMatch.index !== undefined) {
         explanation = expMatch[1].trim();
         blockContent = blockContent.substring(0, expMatch.index).trim();
       }
 
       let rawAnswerLine = '';
-      const ansMatch = blockContent.match(/(?:^|\n)(?:Đáp án|Đáp số|Chọn|Key|Kết quả|ĐA)[\s.:]+([^\n\r]+)/i);
+      const ansMatch = blockContent.match(/(?:^|\n)[ \t]*(?:Đáp án|Đáp số|Chọn|Key|Kết quả|ĐA)[\s.:]+([^\n\r]+)/i);
       if (ansMatch && ansMatch.index !== undefined) {
         rawAnswerLine = ansMatch[1].trim();
         blockContent = blockContent.substring(0, ansMatch.index) + blockContent.substring(ansMatch.index + ansMatch[0].length);
