@@ -3,7 +3,9 @@ const { execSync } = require('child_process');
 if (process.env.DATABASE_URL) {
   try {
     console.log('DATABASE_URL detected. Synchronizing Prisma schema to database...');
-    execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit' });
+    // No --accept-data-loss: if a schema change would drop data, the build fails
+    // instead of silently deleting users, exams or submissions.
+    execSync('npx prisma db push', { stdio: 'inherit' });
     console.log('Database synchronization completed successfully.');
   } catch (error) {
     console.error('Database sync encountered an issue:', error.message);
